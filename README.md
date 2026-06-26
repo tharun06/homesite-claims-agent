@@ -32,3 +32,55 @@ python main.py
 - mocks/          fake services (video, vision, fraud)
 - azure/          real Azure API calls
 - azure_setup/    scripts to create Azure resources
+
+## Windows setup (fresh clone)
+
+Requires **Python 3.11** and **Node.js 18+**. Commands below are for PowerShell.
+
+```powershell
+git clone https://github.com/tharun06/homesite-claims-agent.git
+cd homesite-claims-agent
+```
+
+### 1. Claims agent (Python)
+
+```powershell
+py -3.11 -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+
+copy .env.example .env          # then paste your real Azure keys into .env
+```
+
+Run it:
+
+```powershell
+python main.py                  # pipeline with mocks (no Azure needed)
+streamlit run app.py            # Streamlit UI (expects an API on :8000)
+```
+
+### 2. Adjuster dashboard
+
+**Backend** (terminal 1) — FastAPI on port 8100:
+
+```powershell
+cd adjuster-dashboard\backend
+pip install -r requirements.txt
+python -m app.seed                              # build the SQLite database (once)
+python -m uvicorn app.main:api --reload --port 8100
+```
+
+API docs: http://localhost:8100/docs
+
+**Frontend** (terminal 2) — Vite on port 5173:
+
+```powershell
+cd adjuster-dashboard\frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 and pick any user to sign in.
+
+> Note: `.env`, `venv/`, `node_modules/`, and the runtime `*.db` files are
+> gitignored — they're recreated by the steps above, not cloned.
