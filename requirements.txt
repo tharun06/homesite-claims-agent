@@ -1,0 +1,12 @@
+langgraph
+langchain
+langchain-openai
+openai
+azure-search-documents
+azure-storage-blob
+python-dotenv
+fastapi
+uvicorn
+pydantic
+langsmith
+aiosqlite

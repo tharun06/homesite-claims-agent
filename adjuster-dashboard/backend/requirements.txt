@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+faker
+python-jose[cryptography]
+python-multipart

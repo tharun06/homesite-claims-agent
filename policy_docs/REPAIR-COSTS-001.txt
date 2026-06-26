@@ -1,0 +1,186 @@
+HOMESITE INSURANCE — VEHICLE REPAIR COST REFERENCE GUIDE
+Document ID: REPAIR-COSTS-001
+Version: 1.0
+Effective Date: January 1, 2025
+
+This document provides repair cost reference ranges used by HomeSite Insurance
+for estimating vehicle damage claims. All costs include parts and labor.
+Actual costs may vary by region, repair shop, and parts availability.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1: EXTERIOR BODY DAMAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1 BUMPER DAMAGE
+
+Front Bumper Repair (minor dent/scratch, no replacement):
+  - Economy vehicles (Honda Civic, Toyota Corolla, Hyundai Elantra): $200–$450
+  - Mid-range vehicles (Honda Accord, Toyota Camry, Mazda 6): $300–$600
+  - Luxury vehicles (BMW 3 Series, Audi A4, Mercedes C-Class): $500–$900
+  - SUVs and Trucks (Ford F-150, Chevy Silverado, Toyota RAV4): $350–$650
+
+Front Bumper Replacement (full replacement with sensors/camera):
+  - Economy vehicles: $600–$1,200
+  - Mid-range vehicles: $800–$1,600
+  - Luxury vehicles: $1,500–$3,500
+  - SUVs and Trucks: $900–$2,000
+
+Rear Bumper Repair (minor dent/scratch, no replacement):
+  - Economy vehicles: $200–$400
+  - Mid-range vehicles: $300–$550
+  - Luxury vehicles: $450–$850
+  - SUVs and Trucks: $300–$600
+
+Rear Bumper Replacement:
+  - Economy vehicles: $500–$1,000
+  - Mid-range vehicles: $700–$1,400
+  - Luxury vehicles: $1,200–$3,000
+  - SUVs and Trucks: $800–$1,800
+
+1.2 HOOD DAMAGE
+
+Hood Repair (minor dents, paintwork):
+  - Economy vehicles: $200–$500
+  - Mid-range vehicles: $300–$700
+  - Luxury vehicles: $600–$1,200
+  - SUVs and Trucks: $400–$800
+
+Hood Replacement:
+  - Economy vehicles: $700–$1,500
+  - Mid-range vehicles: $900–$2,000
+  - Luxury vehicles: $1,800–$4,500
+  - SUVs and Trucks: $1,000–$2,500
+
+1.3 DOOR DAMAGE
+
+Door Repair (dent removal + repaint, door stays on vehicle):
+  - Economy vehicles: $300–$600 per door
+  - Mid-range vehicles: $400–$800 per door
+  - Luxury vehicles: $700–$1,500 per door
+  - SUVs and Trucks: $400–$900 per door
+
+Door Replacement (full door shell replacement):
+  - Economy vehicles: $800–$1,800 per door
+  - Mid-range vehicles: $1,000–$2,500 per door
+  - Luxury vehicles: $2,000–$5,000 per door
+  - SUVs and Trucks: $1,200–$3,000 per door
+
+1.4 FENDER DAMAGE
+
+Fender Repair:
+  - Economy vehicles: $200–$450
+  - Mid-range vehicles: $300–$600
+  - Luxury vehicles: $500–$1,100
+  - SUVs and Trucks: $350–$700
+
+Fender Replacement:
+  - Economy vehicles: $500–$1,100
+  - Mid-range vehicles: $700–$1,600
+  - Luxury vehicles: $1,400–$3,500
+  - SUVs and Trucks: $800–$2,000
+
+1.5 TRUNK / TAILGATE DAMAGE
+
+Trunk Repair:
+  - Economy vehicles: $200–$500
+  - Mid-range vehicles: $300–$700
+  - Luxury vehicles: $600–$1,300
+
+Trunk Replacement:
+  - Economy vehicles: $600–$1,400
+  - Mid-range vehicles: $900–$2,000
+  - Luxury vehicles: $1,800–$4,000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2: GLASS DAMAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Windshield Chip Repair (small chip, no replacement):
+  - All vehicles: $50–$150
+
+Windshield Replacement:
+  - Economy vehicles: $200–$400
+  - Mid-range vehicles: $300–$600
+  - Luxury vehicles (with HUD or heated): $600–$1,500
+  - SUVs and Trucks: $300–$700
+
+Side Window Replacement:
+  - Economy vehicles: $150–$350
+  - Mid-range vehicles: $200–$500
+  - Luxury vehicles: $400–$900
+
+Rear Window Replacement:
+  - Economy vehicles: $200–$450
+  - Mid-range vehicles: $300–$600
+  - Luxury vehicles: $500–$1,200
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3: STRUCTURAL DAMAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Frame Straightening (minor misalignment):
+  - All vehicles: $500–$1,500
+
+Frame Repair (moderate damage, welding required):
+  - All vehicles: $1,500–$4,500
+
+Roof Damage Repair:
+  - Economy vehicles: $500–$1,500
+  - Mid-range vehicles: $700–$2,000
+  - Luxury vehicles: $1,500–$4,000
+  - SUVs: $800–$2,500
+
+Roof Replacement (severe damage):
+  - Economy vehicles: $1,500–$3,500
+  - Mid-range vehicles: $2,000–$5,000
+  - Luxury vehicles: $4,000–$10,000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4: MECHANICAL DAMAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Radiator Replacement:
+  - Economy vehicles: $400–$900
+  - Mid-range vehicles: $600–$1,400
+  - Luxury vehicles: $1,000–$2,500
+
+Airbag Replacement (per airbag, after deployment):
+  - Driver airbag: $400–$1,000
+  - Passenger airbag: $400–$1,200
+  - Side curtain airbags (per side): $600–$1,500
+  - Dashboard replacement after airbag deployment: $1,500–$3,500
+
+Engine Damage (from flooding or collision):
+  - Minor repair: $1,500–$4,000
+  - Severe / replacement: $4,000–$15,000
+
+Suspension Damage:
+  - Minor (struts, alignment): $500–$1,500
+  - Moderate (control arms, axles): $1,500–$4,000
+  - Severe: $4,000–$8,000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5: TOTAL LOSS THRESHOLD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+A vehicle is considered a total loss when repair cost exceeds 75% of
+the Actual Cash Value (ACV) of the vehicle at time of loss.
+
+Severity Classification:
+  - Minor damage:    repair cost < $1,000
+  - Moderate damage: repair cost $1,000–$5,000
+  - Severe damage:   repair cost $5,000–$15,000
+  - Total loss:      repair cost > 75% of vehicle ACV
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6: LABOR RATES BY REGION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Standard labor rate used in above estimates: $120/hour
+
+Regional multipliers:
+  - Northeast (NY, MA, CT): 1.2x
+  - West Coast (CA, WA, OR): 1.15x
+  - Southeast (FL, GA, TX): 0.9x
+  - Midwest (OH, IN, IL): 0.95x
+  - Southwest (AZ, NV, NM): 1.0x
