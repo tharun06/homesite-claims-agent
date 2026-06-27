@@ -1,0 +1,306 @@
+{
+  "info": {
+    "name": "HomeSite Claims Agent - Full API Collection",
+    "description": "Full Postman collection for the local claims API and adjuster dashboard API. Includes login, protected dashboard endpoints, and claims submission/status endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "dashboardBaseUrl",
+      "value": "http://127.0.0.1:8100",
+      "type": "string"
+    },
+    {
+      "key": "claimsBaseUrl",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "donaldgarcia@example.net",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "claimId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "policyId",
+      "value": "POL-001",
+      "type": "string"
+    },
+    {
+      "key": "vehicleVin",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Dashboard API",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{dashboardBaseUrl}}/health"
+          }
+        },
+        {
+          "name": "List login users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{dashboardBaseUrl}}/auth/users"
+          }
+        },
+        {
+          "name": "Login (mock email)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('Saved token');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "email",
+                  "value": "{{email}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": "{{dashboardBaseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/me"
+          }
+        },
+        {
+          "name": "List claims",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.claims && json.claims.length > 0) {",
+                  "  var first = json.claims[0];",
+                  "  pm.collectionVariables.set('claimId', first.id.toString());",
+                  "  if (first.vehicle && first.vehicle.vin) {",
+                  "    pm.collectionVariables.set('vehicleVin', first.vehicle.vin);",
+                  "  }",
+                  "  console.log('Saved claim id ' + first.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/claims"
+          }
+        },
+        {
+          "name": "Get claim by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/claims/{{claimId}}"
+          }
+        },
+        {
+          "name": "Get claim conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/claims/{{claimId}}/conversations"
+          }
+        },
+        {
+          "name": "Get claim events",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/claims/{{claimId}}/events"
+          }
+        },
+        {
+          "name": "My tasks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/me/tasks"
+          }
+        },
+        {
+          "name": "My assignments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/me/assignments"
+          }
+        },
+        {
+          "name": "Queue metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/metrics/queue"
+          }
+        },
+        {
+          "name": "Get vehicle by VIN",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": "{{dashboardBaseUrl}}/vehicles/{{vehicleVin}}"
+          }
+        },
+        {
+          "name": "Repair shops",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{dashboardBaseUrl}}/repair-shops?lat=40.7128&lng=-74.0060&radius_km=50&in_network_only=false",
+              "query": [
+                { "key": "lat", "value": "40.7128" },
+                { "key": "lng", "value": "-74.0060" },
+                { "key": "radius_km", "value": "50" },
+                { "key": "in_network_only", "value": "false" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Claims API",
+      "item": [
+        {
+          "name": "Submit claim",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "claim_id", "value": "{{claimId}}", "type": "text" },
+                { "key": "policy_id", "value": "{{policyId}}", "type": "text" },
+                { "key": "description", "value": "My parked car was hit and the side door is dented.", "type": "text" },
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": "{{claimsBaseUrl}}/claims/submit"
+          }
+        },
+        {
+          "name": "Submit evidence",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "extra_description", "value": "Please review the additional photos for the damaged panel.", "type": "text" }
+              ]
+            },
+            "url": "{{claimsBaseUrl}}/claims/{{claimId}}/evidence"
+          }
+        },
+        {
+          "name": "Get claim status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{claimsBaseUrl}}/claims/{{claimId}}/status"
+          }
+        }
+      ]
+    }
+  ]
+}

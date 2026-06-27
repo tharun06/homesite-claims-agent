@@ -63,10 +63,12 @@ export const WS_BASE = "ws://localhost:8100/ws";
 const COPILOT = "http://localhost:8200";
 export const copilot = {
   chat: async (message) => {
+    const user = getUser();
+    const thread_id = `user-${user?.id ?? "anon"}`;
     const res = await fetch(`${COPILOT}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, thread_id }),
     });
     if (!res.ok) throw new Error("copilot error");
     return res.json();
