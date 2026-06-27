@@ -39,3 +39,6 @@ Thumbs.db
 
 # ─── Local Claude settings ────────────────────────────────
 .claude/settings.local.json
+
+# ─── LangGraph local dev state ────────────────────────────
+.langgraph_api/

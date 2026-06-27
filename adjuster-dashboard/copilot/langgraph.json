@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "copilot": "./studio_graph.py:make_graph"
+  },
+  "env": "../../.env"
+}
