@@ -99,3 +99,8 @@ tr:hover td { background: #fafbfc; }
 .user-row:hover { border-color: var(--accent); }
 .muted { color: var(--muted); }
 .row-actions { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+
+/* copilot pending action */
+.pending-action { background: #fef3c7; border: 1px solid var(--warn); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.pending-action .tool { font-weight: 700; color: var(--fraud); }
+.pending-action .args { font-size: 12px; color: var(--muted); margin: 4px 0 8px; word-break: break-word; }

@@ -61,18 +61,28 @@ export const WS_BASE = "ws://localhost:8100/ws";
 
 // Copilot service (separate process, port 8200)
 const COPILOT = "http://localhost:8200";
+
+function threadId() {
+  const user = getUser();
+  return `user-${user?.id ?? "anon"}`;
+}
+
+async function copilotPost(path, body) {
+  const res = await fetch(`${COPILOT}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("copilot error");
+  return res.json();
+}
+
 export const copilot = {
-  chat: async (message) => {
-    const user = getUser();
-    const thread_id = `user-${user?.id ?? "anon"}`;
-    const res = await fetch(`${COPILOT}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ message, thread_id }),
-    });
-    if (!res.ok) throw new Error("copilot error");
-    return res.json();
-  },
+  chat: (message) => copilotPost("/chat", { message, thread_id: threadId() }),
+  // approve/reject don't use `message`, but /approve and /reject both expect the same
+  // {message, thread_id} shape as /chat, so we send a placeholder string.
+  approve: () => copilotPost("/approve", { message: "approve", thread_id: threadId() }),
+  reject: () => copilotPost("/reject", { message: "reject", thread_id: threadId() }),
   reset: () =>
     fetch(`${COPILOT}/chat/reset`, {
       method: "POST",
