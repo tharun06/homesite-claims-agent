@@ -47,7 +47,7 @@ async def build_graph(adjuster_token: str | None = None):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tools = await load_mcp_tools(session)
-                write_tools = [t for t in tools if t.name in WRITE_TOOLS]   
+                write_tools = [t for t in tools if t.name in WRITE_TOOLS]
                 read_tools = [t for t in tools if t.name not in WRITE_TOOLS]
                 llm = AzureChatOpenAI(
                     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
@@ -73,3 +73,47 @@ async def build_graph(adjuster_token: str | None = None):
                 graph_builder.add_edge("action", "agent")
 
                 yield graph_builder.compile(checkpointer=saver, interrupt_before=["action"])
+
+# friendly phrases for the raw MCP tool names, shown as status while a tool runs
+TOOL_STATUS = {
+    "queue_metrics": "checking your queue metrics",
+    "list_my_claims": "looking up your claims",
+    "get_claim_status": "looking up that claim",
+    "get_my_pending_tasks": "checking your pending tasks",
+    "update_claim_status": "preparing the status change",
+    "add_note_to_claim": "adding your note",
+    "reassign_claim": "reassigning the claim",
+}
+
+
+async def stream_chat(graph, message: str, config: dict):
+    async for event in graph.astream_events(
+        {"messages": [("user", message)]},
+        config=config,
+        version="v2",
+    ):
+        kind = event["event"]
+        if kind == "on_chat_model_stream":
+            text = event["data"]["chunk"].content
+            if text:
+                yield {"delta": text}
+        elif kind == "on_tool_start":
+            phrase = TOOL_STATUS.get(event["name"], f"running {event['name']}")
+            yield {"status": f"🔍 {phrase}…"}
+        elif kind == "on_tool_end":
+            yield {"status": "✍️ writing your answer…"}
+
+    snapshot = await graph.aget_state(config)
+    if snapshot.next:
+        pending = snapshot.values["messages"][-1].tool_calls[-1]
+        yield {
+            "done": True,
+            "pending": True,
+            "action": {"tool": pending["name"], "args": pending["args"]},
+        }
+    else:
+        yield {
+            "done": True,
+            "pending": False,
+            "answer": snapshot.values["messages"][-1].content,
+        }

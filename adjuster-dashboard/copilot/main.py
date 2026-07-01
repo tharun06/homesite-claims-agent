@@ -2,9 +2,11 @@ from unittest import result
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from agent import build_graph
+from agent import build_graph, stream_chat
 from langchain_core.messages import ToolMessage
+import json
 import traceback
 
 app = FastAPI(title="Adjuster Copilot")
@@ -28,29 +30,33 @@ def hello():
 async def chat(req: ChatRequest, authorization: str = Header(...)):
     token = authorization.removeprefix("Bearer ").strip()
     config = {"configurable": {"thread_id": req.thread_id}}
-    try:
-        async with build_graph(adjuster_token=token) as graph:
-            result = await graph.ainvoke(
-                {"messages": [("user", req.message)]},
-                config=config,
-            )
-            snapshot = await graph.aget_state(config)
 
-        # graph paused before the gated write node → ask for approval
-        if snapshot.next:
-            pending = result["messages"][-1].tool_calls[-1]
-            return {
-                "pending": True,
-                "thread_id": req.thread_id,
-                "action": {"tool": pending["name"], "args": pending["args"]},
-                "answer": f"I'm about to run {pending['name']} with {pending['args']}. Approve or reject?",
-            }
+    async def event_stream():
+        try:
+            async with build_graph(adjuster_token=token) as graph:
+                snapshot = await graph.aget_state(config)
+                if snapshot.next:
+                    pending = snapshot.values["messages"][-1].tool_calls[-1]
+                    yield json.dumps({
+                        "done": True,
+                        "pending": True,
+                        "action": {"tool": pending["name"], "args": pending["args"]},
+                        "answer": "There's already an action awaiting approval or rejection. Please approve or reject it first.",
+                    }) + "\n"
+                    return
 
-        # normal completion → return the final answer
-        return {"pending": False, "answer": result["messages"][-1].content}
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+                async for piece in stream_chat(graph, req.message, config):
+                    if piece.get("pending"):
+                        piece["answer"] = (
+                            f"I'm about to run {piece['action']['tool']} "
+                            f"with {piece['action']['args']}. Approve or reject?"
+                        )
+                    yield json.dumps(piece) + "\n"
+        except Exception as e:
+            traceback.print_exc()
+            yield json.dumps({"done": True, "pending": False, "error": str(e)}) + "\n"
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 @app.post("/approve")
 async def approve(req: ChatRequest, authorization: str = Header(...)):

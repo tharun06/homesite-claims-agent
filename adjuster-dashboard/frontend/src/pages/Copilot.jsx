@@ -17,10 +17,28 @@ export default function Copilot() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(null); // { tool, args } while a write awaits approval
+  const [status, setStatus] = useState("");     // transient "🔍 looking up…" line during the wait
   const endRef = useRef(null);
   const { connected } = useWebSocket(() => {});
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy, status]);
+
+  function appendToLastMessage(text) {
+    setMsgs((m) => {
+      const updated = [...m];
+      const last = updated[updated.length - 1];
+      updated[updated.length - 1] = { ...last, content: last.content + text };
+      return updated;
+    });
+  }
+
+  function replaceLastMessage(content) {
+    setMsgs((m) => {
+      const updated = [...m];
+      updated[updated.length - 1] = { ...updated[updated.length - 1], content };
+      return updated;
+    });
+  }
 
   async function send(text) {
     const q = (text ?? input).trim();
@@ -28,25 +46,67 @@ export default function Copilot() {
     setInput("");
     setMsgs((m) => [...m, { role: "user", content: q }]);
     setBusy(true);
+    setStatus("Thinking…"); // immediate, before the server sends its first progress line
+
+    // Deltas often arrive in fast bursts (many chunks within milliseconds) — too
+    // fast for a human to see as "typing". Buffer them here and drip-feed a
+    // couple characters per tick instead, decoupling arrival speed from display speed.
+    let queue = "";
+    let streamEnded = false;
+    let final = null;
+    let bubbleStarted = false;
+    const CHARS_PER_TICK = 2;
+    const TICK_MS = 20;
+
+    // create the empty answer bubble lazily — only once real text (or the final
+    // answer) is ready, so the wait shows just the status line, not an empty box
+    const startBubble = () => {
+      if (bubbleStarted) return;
+      bubbleStarted = true;
+      setStatus("");
+      setMsgs((m) => [...m, { role: "assistant", content: "" }]);
+    };
+
+    const timer = setInterval(() => {
+      if (queue.length > 0) {
+        startBubble();
+        appendToLastMessage(queue.slice(0, CHARS_PER_TICK));
+        queue = queue.slice(CHARS_PER_TICK);
+      } else if (streamEnded) {
+        clearInterval(timer);
+        startBubble(); // ensures a bubble exists even for the zero-delta (pending) case
+        replaceLastMessage(final.answer); // authoritative final text
+        setPending(final.pending ? final.action : null);
+        setBusy(false);
+      }
+    }, TICK_MS);
+
     try {
-      const r = await copilot.chat(q);
-      setMsgs((m) => [...m, { role: "assistant", content: r.answer, tools: r.tools }]);
-      setPending(r.pending ? r.action : null);
+      final = await copilot.chat(
+        q,
+        (delta) => { queue += delta; },
+        (s) => { if (!bubbleStarted) setStatus(s); }, // ignore late status once text is flowing
+      );
+      streamEnded = true; // the timer above will notice the drained queue and finalize
     } catch {
-      setMsgs((m) => [...m, { role: "assistant", content: "⚠️ Copilot service unavailable. Is it running on port 8200?" }]);
-    } finally {
+      clearInterval(timer);
+      setStatus("");
+      startBubble();
+      replaceLastMessage("⚠️ Copilot service unavailable. Is it running on port 8200?");
       setBusy(false);
     }
   }
 
   async function decide(approved) {
     setBusy(true);
+    setStatus(approved ? "Applying the change…" : "Cancelling…");
     try {
       const r = approved ? await copilot.approve() : await copilot.reject();
       setMsgs((m) => [...m, { role: "assistant", content: r.answer }]);
     } catch {
       setMsgs((m) => [...m, { role: "assistant", content: "⚠️ Copilot service unavailable. Is it running on port 8200?" }]);
     } finally {
+      setStatus("");
       setPending(null);
       setBusy(false);
     }
@@ -56,6 +116,7 @@ export default function Copilot() {
     await copilot.reset();
     setMsgs([{ role: "assistant", content: "Conversation reset. What would you like to know?" }]);
     setPending(null);
+    setStatus("");
   }
 
   return (
@@ -82,7 +143,7 @@ export default function Copilot() {
                 <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
               </div>
             ))}
-            {busy && <div className="msg customer muted">thinking…</div>}
+            {status && <div className="msg customer muted">{status}</div>}
             <div ref={endRef} />
           </div>
 

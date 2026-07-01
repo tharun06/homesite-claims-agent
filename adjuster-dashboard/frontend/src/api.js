@@ -78,7 +78,44 @@ async function copilotPost(path, body) {
 }
 
 export const copilot = {
-  chat: (message) => copilotPost("/chat", { message, thread_id: threadId() }),
+  // /chat streams newline-delimited JSON: {"status": "..."} progress lines and
+  // {"delta": "..."} answer fragments while it works, then one {"done": true, ...}.
+  // onDelta(text) fires per answer fragment; onStatus(text) fires per progress
+  // update. The returned promise resolves with the final line once the stream ends.
+  chat: async (message, onDelta, onStatus) => {
+    const res = await fetch(`${COPILOT}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ message, thread_id: threadId() }),
+    });
+    if (!res.ok) throw new Error("copilot error");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let final = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line) continue;
+        const piece = JSON.parse(line);
+        if (piece.status && onStatus) onStatus(piece.status);
+        if (piece.delta) onDelta(piece.delta);
+        if (piece.done) final = piece;
+      }
+    }
+
+    if (!final) throw new Error("stream ended without a final response");
+    if (final.error) throw new Error(final.error);
+    return final;
+  },
   // approve/reject don't use `message`, but /approve and /reject both expect the same
   // {message, thread_id} shape as /chat, so we send a placeholder string.
   approve: () => copilotPost("/approve", { message: "approve", thread_id: threadId() }),
