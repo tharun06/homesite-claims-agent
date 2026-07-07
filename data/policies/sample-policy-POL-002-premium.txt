@@ -1,0 +1,39 @@
+HOMESITE INSURANCE — SAMPLE POLICY SCHEDULE
+Policy Number: POL-002 | Tier: PREMIUM | Effective 2026-01-01 to 2026-12-31
+
+NAMED INSURED AND VEHICLE
+This premium-tier schedule illustrates higher limits and added endorsements
+relative to the master defaults. Where this schedule states a figure, it
+overrides the AUTO-POLICY-MASTER default.
+
+COVERAGES AND LIMITS
+- Collision: covered. Deductible $250 (reduced from standard $500).
+- Comprehensive: covered. Deductible $100 (reduced from standard $250).
+- Liability Bodily Injury: $250,000 per person / $500,000 per accident.
+- Liability Property Damage: $100,000 per accident.
+- Uninsured/Underinsured Motorist BI: $250,000 / $500,000.
+- Medical Payments: $10,000 per person.
+- Rental Reimbursement: $75 per day, 45-day maximum (Rental Upgrade endorsement).
+- Roadside: Roadside Plus.
+
+ENDORSEMENTS ON THIS POLICY
+- GAP coverage (financed vehicle).
+- OEM Parts endorsement (OEM required on all repairs).
+- Full Glass endorsement ($0 glass deductible).
+- New-Car Replacement (vehicle is within 24 months / 24,000 miles).
+
+CLAIM-HANDLING IMPLICATIONS
+- Apply the reduced deductibles ($250 collision, $100 comprehensive) at
+  settlement, not the master defaults.
+- All repair estimates must specify OEM parts.
+- Glass-only claims carry a $0 deductible; ADAS recalibration still applies.
+- A first total loss is settled under New-Car Replacement (new comparable
+  vehicle cost), not ACV.
+- Rental is authorized up to $75/day for up to 45 days.
+- On total loss of the financed vehicle, pay ACV or New-Car Replacement value,
+  then the GAP shortfall to the lienholder.
+
+NOTES
+This is a sample schedule for reference and training. Figures illustrate how a
+premium policy differs from the base terms; always read the specific policy on
+file for an actual claim.

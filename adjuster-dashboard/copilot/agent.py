@@ -20,6 +20,16 @@ class State(TypedDict):
 
 WRITE_TOOLS = {"update_claim_status"}
 
+# confirmed via a direct A/B test: without this, the model cites sources in
+# vague prose ("the adjuster authority matrix") instead of the exact file name.
+SYSTEM_PROMPT = (
+    "You are an assistant for insurance adjusters. When you use information "
+    "from search_policy_docs, you MUST name the source document explicitly "
+    "(e.g. 'per adjuster-authority-matrix.txt') and, if a numeric limit or "
+    "threshold is relevant, state the exact number and directly compare it "
+    "to the user's figures."
+)
+
 def router_after_agent(state: State):
     last_message = state["messages"][-1]
     if not last_message.tool_calls:
@@ -57,7 +67,8 @@ async def build_graph(adjuster_token: str | None = None):
                 ).bind_tools(tools)
 
                 def agent_node(state: State):
-                    return {"messages": [llm.invoke(state["messages"])]}
+                    messages = [("system", SYSTEM_PROMPT), *state["messages"]]
+                    return {"messages": [llm.invoke(messages)]}
 
                 tool_node = ToolNode(read_tools)
                 action_node = ToolNode(write_tools)
@@ -83,6 +94,7 @@ TOOL_STATUS = {
     "update_claim_status": "preparing the status change",
     "add_note_to_claim": "adding your note",
     "reassign_claim": "reassigning the claim",
+    "search_policy_docs": "searching policy documents",
 }
 
 

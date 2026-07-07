@@ -1,0 +1,39 @@
+HOMESITE INSURANCE — SAMPLE POLICY SCHEDULE
+Policy Number: POL-003 | Tier: LIABILITY-ONLY (BASIC) | Effective 2026-01-01 to 2026-12-31
+
+NAMED INSURED AND VEHICLE
+This basic liability-only schedule illustrates a policy carrying no physical-
+damage coverage on the insured's own vehicle. It is common for older or paid-off
+vehicles. Where this schedule states a figure or omits a coverage, it overrides
+the AUTO-POLICY-MASTER default.
+
+COVERAGES AND LIMITS
+- Collision: NOT covered. The insured's own collision damage is not payable.
+- Comprehensive: NOT covered. Theft, fire, vandalism, and glass are not payable.
+- Liability Bodily Injury: $50,000 per person / $100,000 per accident.
+- Liability Property Damage: $25,000 per accident.
+- Uninsured/Underinsured Motorist BI: $50,000 / $100,000.
+- Medical Payments: $2,500 per person.
+- Rental Reimbursement: not carried.
+- Roadside: not carried.
+
+ENDORSEMENTS ON THIS POLICY
+None.
+
+CLAIM-HANDLING IMPLICATIONS
+- Damage to the insured's OWN vehicle from a collision or comprehensive peril is
+  NOT payable under this policy. Confirm coverage before opening a physical-
+  damage estimate.
+- The policy pays for injury and property damage the insured causes to OTHERS,
+  within the liability limits above.
+- If the insured is hit by an uninsured driver, injuries may be covered under
+  UM BI, but the insured's own vehicle damage is not (no UM property damage and
+  no collision).
+- No rental reimbursement is available; do not authorize a rental.
+- A claim seeking own-vehicle repair on this policy should be denied for lack of
+  coverage, citing the absence of collision/comprehensive on the schedule.
+
+NOTES
+This is a sample schedule for reference and training. It illustrates how a
+liability-only policy limits what an adjuster can pay; always read the specific
+policy on file for an actual claim.

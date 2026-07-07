@@ -1,0 +1,56 @@
+HOMESITE INSURANCE — STATE COMPLIANCE AND RESPONSE TIMELINES
+Document ID: STATE-COMPLIANCE-TIMELINES | Version 2.2 | Effective 2026-01-01
+
+PURPOSE
+This document summarizes state regulatory timelines and unfair-claims-practice
+rules that override internal SLAs where the state figure is more protective of the
+insured. When a state requirement conflicts with the internal SOP, follow the
+state requirement. Timelines are calendar days unless noted.
+
+UNIVERSAL PRINCIPLES (APPLY IN ALL STATES)
+- Acknowledge a new claim promptly after FNOL.
+- Investigate reasonably and pay valid claims without unreasonable delay.
+- Provide a written basis when denying a claim.
+- Do not misrepresent policy provisions or compel litigation by underpaying.
+
+REPRESENTATIVE STATE TIMELINES
+CALIFORNIA (West region)
+- Acknowledge claim: within 15 days of notice.
+- Accept or deny: within 40 days of receiving proof of claim.
+- Payment after acceptance: within 30 days.
+
+TEXAS (Southwest region)
+- Acknowledge claim: within 15 days.
+- Accept or deny: within 15 business days of receiving all requested items.
+- Payment after acceptance: within 5 business days.
+
+NEW YORK (Northeast region)
+- Acknowledge claim: within 15 business days.
+- Decision: within 15 business days after proof of loss and investigation.
+- Status updates every 90 days if a claim remains open.
+
+FLORIDA (Southeast region)
+- Acknowledge claim: within 14 days.
+- Pay or deny: within 90 days of notice, absent factors beyond control.
+
+ILLINOIS (Midwest region)
+- Acknowledge claim: within a reasonable time, generally 15 days.
+- Provide a reasonable explanation for delay or denial in writing.
+
+REQUIRED DISCLOSURES
+- Total-loss settlements must itemize ACV, deductions, taxes, and fees.
+- Denials must cite the specific policy language relied upon and the appeal path.
+- When using aftermarket parts, disclose their use on the estimate where the
+  state requires it.
+
+UNFAIR CLAIMS PRACTICES (PROHIBITED)
+- Failing to acknowledge or act reasonably promptly on communications.
+- Denying without a reasonable investigation.
+- Offering substantially less than a reasonable person would expect to recover.
+- Delaying payment by requesting duplicative or unnecessary documentation.
+
+ADJUSTER GUIDANCE
+When a claim spans multiple states (e.g., loss location differs from garaging
+state), apply the rules of the state with jurisdiction over the policy unless
+counsel advises otherwise. When in doubt, use the shorter (more protective)
+timeline and document the reasoning.

@@ -1,0 +1,51 @@
+HOMESITE INSURANCE — REPAIR COST AND LABOR RATE REFERENCE
+Document ID: REPAIR-COST-REFERENCE | Version 5.0 | Effective 2026-01-01
+
+PURPOSE
+This reference provides standard labor rates, common part costs, and repair
+operation guidelines used to validate estimates during Appraisal. Figures are
+guideline benchmarks; documented regional or shop-specific variation is
+acceptable.
+
+LABOR RATE GUIDELINES (PER FLAT-RATE HOUR)
+- Mechanical labor: $95 - $130
+- Body labor: $55 - $75
+- Frame/structural labor: $75 - $95
+- Refinish (paint) labor: $55 - $70
+- Diagnostic/scan time: $120 - $180 per event
+Rates trend to the higher end in the Northeast and West regions and the lower end
+in the Midwest and Southeast. Estimates exceeding these ranges by more than 20%
+require a justification note.
+
+PAINT AND MATERIALS
+Paint materials are typically billed at a per-refinish-hour rate of $38 - $52.
+Blend panels are billed at 50% of full refinish time on adjacent panels.
+
+COMMON PART COST BENCHMARKS (OEM, BEFORE TAX)
+- Front bumper cover (mainstream sedan): $350 - $650
+- Headlamp assembly (halogen): $180 - $400; (LED/adaptive): $700 - $1,600
+- Hood: $400 - $900
+- Windshield (standard): $250 - $450; (with ADAS/camera): $900 - $1,800
+- Fender (each): $180 - $420
+- Airbag module (driver): $900 - $1,500; (curtain, each): $600 - $1,100
+
+OEM VERSUS AFTERMARKET PARTS
+Aftermarket or recycled parts are acceptable for non-structural components on
+vehicles outside the manufacturer warranty period, subject to state rules and the
+insured's endorsements. Safety-related and structural parts should be OEM unless
+a certified equivalent exists. The OEM Parts endorsement requires OEM throughout.
+
+ADAS RECALIBRATION
+Any repair that removes, replaces, or disturbs a windshield, front camera, radar,
+or related sensor requires ADAS recalibration. Static or dynamic recalibration is
+billed at $150 - $500 per event and must appear as a separate line with
+documentation.
+
+SUPPLEMENTS
+Additional damage found after teardown is handled as a supplement. Supplements
+require photos of the newly discovered damage and re-approval if the revised
+total crosses an authority limit or the total-loss threshold.
+
+RENTAL DURING REPAIR
+Rental is authorized at up to $50 per day for a maximum of 30 days while a covered
+repair is underway, ceasing at repair completion or total-loss settlement.

@@ -1,5 +1,6 @@
 import os
 import json
+from urllib import response
 import httpx
 from mcp.server.fastmcp import FastMCP
 
@@ -7,6 +8,13 @@ from mcp.server.fastmcp import FastMCP
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8100")
 TOKEN = os.getenv("ADJUSTER_TOKEN", "")
 HEADERS = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {} 
+SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT", "").rstrip("/")
+SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY", "")
+SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX", "")
+AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
+AOAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
+EMBED_DEPLOYMENT = os.getenv("AZURE_EMBEDDING_DEPLOYMENT", "")
+
 
 mcp = FastMCP("homesite-claims")
 
@@ -31,6 +39,32 @@ def resolve_claim(claim_number: str) -> dict | None:
         if claim.get("claim_number") == claim_number:
             return claim
     return None
+
+def _embed(text: str) -> list[float]:
+    """Turn text into a vector, using the same embedding model that indexed the policy docs."""
+    url = f"{AOAI_ENDPOINT}/openai/deployments/{EMBED_DEPLOYMENT}/embeddings?api-version=2023-05-15"
+    response = httpx.post(url, headers={"api-key": AOAI_KEY}, json={"input": text})
+    response.raise_for_status()
+    return response.json()["data"][0]["embedding"]
+
+def _search_policies(query: str, k: int =3) -> list[dict]:
+    """Search the policy docs index for relevant clauses, using Azure AI Search + embeddings."""
+    embedding = _embed(query)
+    url = f"{SEARCH_ENDPOINT}/indexes/{SEARCH_INDEX}/docs/search?api-version=2023-07-01-Preview"
+    payload = {
+        "vector": {
+            "value": embedding,
+            "fields": "content_vector",
+            "k": k
+        },
+        "queryType": "semantic",
+        "semanticConfiguration": "default",
+        "top": 5,
+        "select": "content,metadata_storage_name"
+    }
+    response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload)
+    response.raise_for_status()
+    return response.json().get("value", [])
 
 @mcp.tool()
 def queue_metrics() -> str:
@@ -156,6 +190,25 @@ def reassign_claim(claim_number: str, adjuster_id: int) -> str:
         "adjuster_id": adjuster_id,
         "ok": True,
     })
+
+@mcp.tool()
+def search_policy_docs(query: str) -> str:
+    """Search HomeSite's policy, claims-handling, fraud/SIU, and authority
+    documents for guidance on rules and procedures — e.g. coverage limits,
+    deductibles, escalation rules, fraud thresholds, SLA timelines. Use this
+    for 'what is the rule / am I allowed to / how do I' questions.
+    Do NOT use this to look up a specific claim's own data — use
+    list_my_claims or get_claim_status for that instead.
+    You MUST name the source document explicitly in your answer, e.g.
+    "per adjuster-authority-matrix.txt". If an excerpt contains a numeric
+    limit or threshold, compare it directly against the user's figures and
+    state plainly whether they are within or over it — do not hedge."""
+    hits = _search_policies(query)
+    compact = [
+        {"source": h.get("metadata_storage_name"), "excerpt": h.get("content")}
+        for h in hits
+    ]
+    return json.dumps(compact)
 
 if __name__ == "__main__":
     mcp.run()

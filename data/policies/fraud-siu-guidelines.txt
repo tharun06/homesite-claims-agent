@@ -1,0 +1,59 @@
+HOMESITE INSURANCE — FRAUD DETECTION AND SIU REFERRAL GUIDELINES
+Document ID: FRAUD-SIU-GUIDELINES | Version 2.4 | Effective 2026-01-01
+
+PURPOSE
+This document defines fraud red-flag indicators, how to interpret the automated
+fraud score, and when and how to refer a claim to the Special Investigations Unit
+(SIU). It governs use of the "SIU Flagged" status on the dashboard.
+
+THE FRAUD SCORE
+Every claim receives an automated fraud score between 0.00 and 1.00 produced by
+the fraud model. The score estimates the likelihood that a claim warrants further
+scrutiny. It is a triage signal, not a determination of fraud. Bands:
+
+- 0.00 - 0.39  LOW: Handle normally. No extra fraud steps required.
+- 0.40 - 0.69  ELEVATED: Enhanced review. The adjuster must document a fraud
+  checklist and obtain a recorded statement before settlement.
+- 0.70 - 1.00  HIGH: SIU referral required. Set the claim to SIU Flagged and do
+  not issue payment until SIU clears or advises.
+
+A claim may be referred to SIU regardless of score if red-flag indicators are
+present. Score alone never justifies denial.
+
+RED-FLAG INDICATORS
+Claimant / reporting behavior:
+- Loss reported significantly after the incident date without explanation
+- Reluctance to provide a recorded statement or a police report
+- Inconsistent or shifting accounts of the incident
+- Policy purchased or coverage increased shortly before the loss
+
+Loss characteristics:
+- No independent witnesses to a significant-damage loss
+- Damage inconsistent with the described mechanism of loss
+- Prior unrepaired damage presented as new
+- Vehicle reported stolen with no signs of forced entry and all keys accounted for
+- Total-loss vehicle with recent high-value aftermarket claims
+
+Documentation:
+- Altered, duplicated, or inconsistent repair estimates or invoices
+- Medical treatment patterns inconsistent with the reported impact severity
+- Repeated claims involving the same shop, provider, or claimant network
+
+SIU REFERRAL PROCESS
+1. Set the claim status to SIU Flagged.
+2. Complete the SIU referral note: list the specific indicators observed and
+   attach supporting evidence (photos, statements, documents).
+3. Place any pending payment on hold. Do not deny the claim solely on suspicion.
+4. Notify the insured only as permitted; do not disclose the SIU referral itself.
+5. SIU acknowledges within 2 business days and provides a disposition target.
+
+SIU DISPOSITIONS
+- Cleared: Return to normal handling; document the clearance and resume the SLA.
+- Substantiated: SIU advises on denial, referral to authorities, or negotiated
+  resolution. The adjuster follows SIU direction and legal review.
+- Inconclusive: Proceed with enhanced documentation; note residual risk.
+
+SCOPE AND ACCESS NOTE
+SIU investigators have visibility into fraud-flagged claims across teams. Regular
+adjusters see only their own book. Escalation to SIU does not transfer ownership
+of the claim unless SIU explicitly assumes it.

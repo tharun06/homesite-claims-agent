@@ -1,0 +1,71 @@
+HOMESITE INSURANCE — CLAIMS HANDLING STANDARD OPERATING PROCEDURE
+Document ID: CLAIMS-HANDLING-SOP | Version 3.1 | Effective 2026-01-01
+
+PURPOSE
+This SOP defines how an adjuster progresses an auto claim through its lifecycle,
+the documentation required at each stage, and the service-level (SLA) timelines
+that must be met. The claim statuses below map directly to the adjuster
+dashboard.
+
+CLAIM LIFECYCLE AND STATUSES
+FNOL -> Under Review -> Investigation -> Appraisal -> Pending Approval ->
+Approved / Denied -> Closed. Claims may be routed to SIU Flagged at any stage
+when fraud indicators are present (see FRAUD-SIU-GUIDELINES).
+
+STAGE 1: FNOL (FIRST NOTICE OF LOSS)
+The claim is created when loss is first reported. Required at intake: policy
+number, date/time and location of loss, description of the incident, involved
+parties and vehicles, and police report number if applicable.
+SLA: The assigned adjuster must make first contact with the insured within 1
+business day (24 hours) of FNOL creation.
+
+STAGE 2: UNDER REVIEW
+The adjuster verifies coverage against the policy schedule and master terms,
+confirms the policy was in force on the loss date, and validates the deductible.
+Required: coverage verification note, confirmation of premium payment status.
+SLA: Coverage determination within 3 business days of first contact.
+
+STAGE 3: INVESTIGATION
+The adjuster gathers evidence: recorded or written statements, photographs of all
+damage, the police report, and any third-party information. For disputed-fault or
+injury claims, liability is assessed here.
+Required: minimum of one photograph per damaged area, a signed or recorded
+statement from the insured, and a liability assessment note.
+SLA: Investigation substantially complete within 10 business days of FNOL.
+
+STAGE 4: APPRAISAL
+Damage is quantified. The adjuster obtains repair estimates from a licensed
+facility or assigns a field/desk appraiser. Where repair cost approaches the
+total-loss threshold, a total-loss evaluation is triggered (see
+SETTLEMENT-VALUATION).
+Required: itemized repair estimate, photos supporting each line, total-loss
+worksheet if applicable.
+SLA: Appraisal/estimate completed within 5 business days of investigation close.
+
+STAGE 5: PENDING APPROVAL
+The proposed settlement is submitted for authority sign-off. The approver is
+determined by the settlement amount and the adjuster's authority limit (see
+ADJUSTER-AUTHORITY-MATRIX). Settlements above the handler's limit escalate.
+Required: settlement summary, valuation basis, and the correct approver.
+
+STAGE 6: APPROVED / DENIED
+On approval, payment is issued per the settlement method. On denial, the adjuster
+issues a written denial citing the specific policy provision or exclusion relied
+upon and the insured's appeal rights.
+SLA: Payment issued within 5 business days of approval. Denial letter issued
+within 3 business days of the decision.
+
+STAGE 7: CLOSED
+The claim is closed after payment clears or the denial/appeal window lapses. All
+documents, notes, and the final disposition must be present in the file.
+
+DOCUMENTATION STANDARD
+Every claim file must contain, before closing: coverage verification, loss
+description, damage photographs, estimate or total-loss worksheet, settlement
+summary, and all customer correspondence. Missing required documentation within
+60 days of FNOL may result in claim denial for non-cooperation.
+
+SLA BREACH HANDLING
+A claim that misses any stage SLA is flagged as an SLA breach on the dashboard.
+Breaches require a supervisor note explaining the delay and a recovery plan.
+Repeated breaches on the same claim escalate to the team lead.

@@ -1,0 +1,58 @@
+HOMESITE INSURANCE — ENDORSEMENTS AND RIDERS CATALOG
+Document ID: ENDORSEMENTS-AND-RIDERS | Version 3.3 | Effective 2026-01-01
+
+PURPOSE
+Endorsements modify the base policy by adding, removing, or changing coverage. An
+endorsement on the policy schedule always overrides the master terms for the
+affected coverage. This catalog describes each optional endorsement and how it
+changes claim handling.
+
+GAP (GUARANTEED ASSET PROTECTION)
+Covers the difference between the vehicle's ACV and the outstanding loan or lease
+balance at total loss, up to 125% of ACV. Requires the vehicle to be financed or
+leased. Excludes carryover negative equity from a prior loan and past-due
+payments. On a total-loss claim with GAP, pay ACV first, then the covered
+shortfall to the lienholder.
+
+OEM PARTS ENDORSEMENT
+Requires original-equipment-manufacturer parts for all repairs, overriding the
+default aftermarket/recycled allowance. Estimates on OEM-endorsed policies must
+specify OEM parts throughout; substitution requires insured consent.
+
+FULL GLASS ENDORSEMENT
+Waives the comprehensive deductible for glass-only claims (windshield, side, and
+rear glass). ADAS recalibration remains payable as a separate line.
+
+NEW-CAR REPLACEMENT
+For vehicles in their first 24 months and under 24,000 miles, a total loss is
+settled at the cost of a new comparable vehicle rather than ACV. Applies to first
+total loss only.
+
+RIDESHARE / TNC COVERAGE
+Extends coverage to periods when the vehicle is logged into a transportation
+network platform (e.g., during passenger pickup and transport). Without this
+endorsement, losses during commercial ridesharing are excluded.
+
+CUSTOM EQUIPMENT
+Raises the custom-equipment sublimit above the standard $1,000 to a scheduled
+amount for aftermarket audio, wheels, wraps, or accessibility modifications.
+Requires receipts or an appraisal at binding.
+
+ACCIDENT FORGIVENESS
+A rating endorsement that prevents the first at-fault accident from increasing
+premium. It does not change coverage or claim payment; it is not relevant to loss
+valuation.
+
+ROADSIDE PLUS
+Upgrades standard roadside to include extended towing distance, trip-interruption
+reimbursement, and a higher event count. Claim handling for roadside events
+follows the roadside limits on the schedule.
+
+RENTAL UPGRADE
+Increases rental reimbursement above the standard $50/day and/or the 30-day cap to
+the scheduled amount. Apply the scheduled figure in place of the master default.
+
+HANDLING RULE
+Before determining coverage on any claim, check the policy schedule for
+endorsements. An endorsement changes deductibles, limits, or eligibility and must
+be applied before valuation.

@@ -1,0 +1,74 @@
+HOMESITE INSURANCE — AUTO POLICY MASTER TERMS
+Document ID: AUTO-POLICY-MASTER | Version 4.2 | Effective 2026-01-01
+
+PURPOSE
+This master document defines the standard coverage terms, limits, deductibles,
+and exclusions that apply to all HomeSite personal auto policies unless a
+specific policy schedule or endorsement states otherwise. Adjusters should treat
+this as the authoritative reference for coverage determination.
+
+SECTION 1: COLLISION COVERAGE
+Collision coverage pays for direct and accidental damage to the insured vehicle
+resulting from impact with another vehicle or a stationary object, or from
+vehicle rollover. Coverage applies regardless of fault. The standard collision
+deductible is $500 per claim incident. Collision does not require a third party
+to be involved.
+
+SECTION 2: COMPREHENSIVE COVERAGE (OTHER-THAN-COLLISION)
+Comprehensive coverage pays for loss to the insured vehicle from non-collision
+causes, including theft, vandalism, fire, falling objects, hail, flood from a
+covered peril, animal strike, and glass breakage. The standard comprehensive
+deductible is $250 per claim incident. Glass-only claims may carry a $0
+deductible if the Full Glass endorsement is present.
+
+SECTION 3: LIABILITY COVERAGE (BODILY INJURY AND PROPERTY DAMAGE)
+Liability coverage pays for injury or property damage the insured causes to
+others. Standard split limits are:
+- Bodily Injury (BI): $100,000 per person / $300,000 per accident
+- Property Damage (PD): $50,000 per accident
+Liability carries no deductible. Defense costs are paid in addition to the
+limits. Liability does not cover damage to the insured's own vehicle.
+
+SECTION 4: UNINSURED / UNDERINSURED MOTORIST (UM/UIM)
+UM/UIM coverage pays for the insured's injuries and, where scheduled, property
+damage caused by an at-fault driver who has no insurance or insufficient limits.
+Standard UM/UIM BI limits mirror the liability BI limits ($100k/$300k). A $250
+deductible applies to UM property damage claims where offered.
+
+SECTION 5: MEDICAL PAYMENTS / PERSONAL INJURY PROTECTION (PIP)
+Medical Payments (MedPay) covers reasonable medical expenses for the insured and
+passengers regardless of fault, standard limit $5,000 per person. In no-fault
+states, PIP replaces MedPay with statutory minimums (see STATE-COMPLIANCE
+document). No deductible applies to MedPay.
+
+SECTION 6: RENTAL REIMBURSEMENT
+When the insured vehicle is undriveable due to a covered loss, rental
+reimbursement pays up to $50 per day for a maximum of 30 days, ceasing when
+repairs complete or a total-loss settlement is issued, whichever is first.
+
+SECTION 7: ROADSIDE ASSISTANCE
+Standard roadside covers towing to the nearest qualified repair facility, jump
+starts, lockout service, flat-tire change, and up to 2 gallons of fuel delivery.
+Limit of 4 service events per policy term.
+
+SECTION 8: STANDARD EXCLUSIONS
+The following are NOT covered under the base policy:
+- Flood damage from external water sources not tied to a covered comprehensive peril
+- Earthquake or natural-disaster damage (unless comprehensive applies)
+- Acts of war, terrorism, or nuclear hazard
+- Intentional or fraudulent damage caused by the insured
+- Normal wear, tear, or mechanical/electrical breakdown
+- Racing, speed contests, or track/competitive use
+- Use of the vehicle for commercial ridesharing without the Rideshare endorsement
+- Damage while the vehicle is used to carry persons or property for hire
+- Custom equipment beyond $1,000 without the Custom Equipment endorsement
+
+SECTION 9: DEDUCTIBLE SUMMARY
+Collision: $500 | Comprehensive: $250 | UM Property Damage: $250
+Glass with Full Glass endorsement: $0 | Liability / MedPay / PIP: none
+
+SECTION 10: KEY DEFINITIONS
+"Covered loss" means damage from a peril insured against and not excluded.
+"Actual Cash Value (ACV)" means replacement cost less depreciation.
+"Total loss" means repair cost plus salvage retention meets or exceeds the total
+loss threshold defined in the SETTLEMENT-VALUATION guide.

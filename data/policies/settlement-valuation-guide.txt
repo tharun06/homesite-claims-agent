@@ -1,0 +1,55 @@
+HOMESITE INSURANCE — SETTLEMENT AND VALUATION GUIDE
+Document ID: SETTLEMENT-VALUATION | Version 3.0 | Effective 2026-01-01
+
+PURPOSE
+This guide explains how to value a covered loss, when a vehicle is a total loss,
+and how to calculate the amount payable to the insured. It supports the Appraisal
+and Pending Approval stages.
+
+ACTUAL CASH VALUE (ACV)
+ACV is the fair market value of the vehicle immediately before the loss:
+replacement cost less depreciation. Determine ACV using a recognized valuation
+source adjusted for the vehicle's mileage, options, prior condition, and local
+market. Document the comparable vehicles or valuation report used.
+
+REPAIRABLE LOSS PAYMENT
+For a repairable vehicle, the amount payable is:
+  Repair cost  -  applicable deductible  +  supplements (if approved)
+The collision deductible ($500) or comprehensive deductible ($250) applies based
+on the peril. Betterment may be deducted where a repair replaces a worn wear-item
+(e.g., tires, battery) with new, improving pre-loss condition.
+
+TOTAL LOSS DETERMINATION
+A vehicle is a total loss when:
+  Repair cost  +  net salvage retained  >=  Total Loss Threshold
+The Total Loss Threshold is 75% of ACV. Some states impose a statutory total-loss
+formula or a fixed percentage; where the state figure differs, use the more
+protective figure for the insured (see STATE-COMPLIANCE-TIMELINES).
+
+TOTAL LOSS PAYMENT
+For a total loss, the amount payable is:
+  ACV  +  applicable taxes and title/registration fees  -  deductible  -  prior
+  unrelated damage  -  owner-retained salvage value (if the insured keeps the vehicle)
+If the insurer retains salvage, no salvage deduction applies to the insured.
+
+DEPRECIATION AND BETTERMENT
+Depreciation applies to the vehicle as a whole for ACV, not to individual repair
+parts, except for designated wear items where betterment is allowed. Never
+depreciate safety-critical structural repairs.
+
+DEDUCTIBLE WAIVER AND SUBROGATION
+Where another party is clearly at fault and subrogation is pursued, the insured's
+deductible is recovered on their behalf and refunded pro-rata upon recovery. The
+adjuster documents the subrogation basis at settlement.
+
+GAP AND LOAN PAYOFF
+When the insured owes more than ACV on a financed vehicle and holds no GAP
+endorsement, the insurer pays only ACV; the insured remains liable for the
+shortfall. With the GAP endorsement, the remaining loan balance is covered up to
+the endorsement limit (see ENDORSEMENTS-AND-RIDERS).
+
+PAYMENT METHODS
+Payments may be issued to the insured, jointly to the insured and lienholder, or
+directly to the repair facility on a direction-to-pay. Total-loss payments on
+financed vehicles are issued jointly with the lienholder to the payoff amount
+first.
