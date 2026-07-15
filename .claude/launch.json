@@ -3,10 +3,24 @@
   "configurations": [
     {
       "name": "dashboard-frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5180", "--strictPort"],
       "cwd": "adjuster-dashboard/frontend",
-      "port": 5173
+      "port": 5180
+    },
+    {
+      "name": "dashboard-backend",
+      "runtimeExecutable": "C:\\Users\\mutho\\Projects\\homesite-claims-agent\\venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:api", "--reload", "--port", "8100"],
+      "cwd": "adjuster-dashboard/backend",
+      "port": 8100
+    },
+    {
+      "name": "copilot-backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--reload", "--port", "8200"],
+      "cwd": "adjuster-dashboard/copilot",
+      "port": 8200
     }
   ]
 }

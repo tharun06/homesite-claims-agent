@@ -11,6 +11,7 @@ HEADERS = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
 SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT", "").rstrip("/")
 SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY", "")
 SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX", "")
+CLAIMS_INDEX = os.getenv("AZURE_CLAIMS_INDEX", "claims-index")
 AOAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
 AOAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
 EMBED_DEPLOYMENT = os.getenv("AZURE_EMBEDDING_DEPLOYMENT", "")
@@ -50,18 +51,41 @@ def _embed(text: str) -> list[float]:
 def _search_policies(query: str, k: int =3) -> list[dict]:
     """Search the policy docs index for relevant clauses, using Azure AI Search + embeddings."""
     embedding = _embed(query)
-    url = f"{SEARCH_ENDPOINT}/indexes/{SEARCH_INDEX}/docs/search?api-version=2023-07-01-Preview"
+    url = f"{SEARCH_ENDPOINT}/indexes/{SEARCH_INDEX}/docs/search?api-version=2024-07-01"
     payload = {
-        "vector": {
-            "value": embedding,
-            "fields": "content_vector",
-            "k": k
-        },
+        "vectorQueries": [
+            { "kind": "vector", "vector": embedding, "fields": "content_vector", "k": k }
+        ],
         "queryType": "semantic",
         "semanticConfiguration": "default",
         "top": 5,
         "select": "content,metadata_storage_name"
     }
+    response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload)
+    response.raise_for_status()
+    return response.json().get("value", [])
+
+def _search_similar_claims(query:str, k:int=5) -> list[dict]:
+    """ Search the claims index for similar claims, using Azure AI Search + embeddings."""
+    # vectorFilterMode=preFilter narrows to the caller's own claims BEFORE ranking,
+    # so k only needs to cover how many matches we actually want back — it no longer
+    # has to be padded to survive a race against every other adjuster's claims.
+    allowed = _get("/claims", params={"limit": 500}).get("claims", [])
+    allowed_numbers = {c["claim_number"] for c in allowed}
+    if not allowed_numbers:
+        return []
+    embedding = _embed(query)
+    filter_str = "search.in(claim_number, '{}', ',')".format(",".join(allowed_numbers))
+    url = f"{SEARCH_ENDPOINT}/indexes/{CLAIMS_INDEX}/docs/search?api-version=2024-07-01"
+    payload = {
+        "vectorFilterMode": "preFilter",
+        "vectorQueries": [
+            { "kind": "vector", "vector": embedding, "fields": "content_vector", "k": k }
+        ],
+        "filter": filter_str,
+        "top": 5,
+        "select": "claim_number,content,estimated_amount,status"
+    }   
     response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload)
     response.raise_for_status()
     return response.json().get("value", [])
@@ -206,6 +230,23 @@ def search_policy_docs(query: str) -> str:
     hits = _search_policies(query)
     compact = [
         {"source": h.get("metadata_storage_name"), "excerpt": h.get("content")}
+        for h in hits
+    ]
+    return json.dumps(compact)
+
+@mcp.tool()
+def search_similar_claims(query: str) -> str:
+    """Search the claims index for similar claims, using semantic search and embeddings.
+    Use this for 'have we seen a claim like this before' questions.
+    Returns a list of similar claims with their claim_number, content, estimated_amount, and status."""
+    hits = _search_similar_claims(query)
+    compact = [
+        {
+            "claim_number": h.get("claim_number"),
+            "content": h.get("content"),
+            "estimated_amount": h.get("estimated_amount"),
+            "status": h.get("status"),
+        }
         for h in hits
     ]
     return json.dumps(compact)
