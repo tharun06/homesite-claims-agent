@@ -115,10 +115,19 @@ async def build_graph(adjuster_token: str | None = None):
                         return ("Analytics are unavailable in this deployment: the "
                                 "claims database is not reachable from the copilot "
                                 "service. Use list_my_claims or queue_metrics instead.")
-                    final = _SQL_GRAPH.invoke({
-                        "question": question, "user_id": sql_user_id,
-                        "role": sql_role, "attempts": 0,
-                    })
+                    # A tool must never kill the whole conversation. The DB can be
+                    # present but unusable — e.g. SQLite on an Azure Files (SMB)
+                    # share raises "database is locked" because SMB does not
+                    # support the POSIX locks SQLite needs. Report it and let the
+                    # agent carry on with its other tools.
+                    try:
+                        final = _SQL_GRAPH.invoke({
+                            "question": question, "user_id": sql_user_id,
+                            "role": sql_role, "attempts": 0,
+                        })
+                    except Exception as e:
+                        return (f"Analytics are unavailable right now ({type(e).__name__}: {e}). "
+                                "Answer from list_my_claims or queue_metrics instead.")
                     return final.get("answer", "No result.")
 
                 tools = list(tools) + [query_claims_data]
