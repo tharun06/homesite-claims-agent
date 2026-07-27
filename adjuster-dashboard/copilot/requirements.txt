@@ -1,0 +1,19 @@
+# Copilot service (LangGraph agent + MCP server).
+# Versions pinned to what this project was built and tested against.
+#
+# IMPORTANT — do not relax the mcp upper bound casually:
+# MCP Python SDK v2 renames `FastMCP` -> `MCPServer`, so `from mcp.server.fastmcp
+# import FastMCP` (mcp_server.py) breaks on v2. Stay on 1.x until we migrate
+# deliberately.
+mcp>=1.28,<2
+langchain-mcp-adapters==0.3.0
+
+langgraph==1.0.10
+langgraph-checkpoint-sqlite==3.1.0
+langchain-openai==1.3.3
+
+fastapi==0.138.1
+uvicorn[standard]==0.49.0
+httpx==0.28.1
+python-dotenv==1.2.1
+aiosqlite==0.22.1

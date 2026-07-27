@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from sqlmodel import Session
 
+from sqlmodel import select
+
 from app.config import JWT_SECRET, JWT_ALGORITHM
 from app.database import init_db, engine
 from app.models import User
@@ -34,9 +36,30 @@ api.include_router(routes_work.router, tags=["work"])
 api.include_router(routes_directory.router, tags=["directory"])
 
 
+def _seed_if_empty():
+    """Seed the database on first boot if it has no users.
+
+    Container filesystems are ephemeral, so a fresh container starts with an empty
+    SQLite file. Login is 'pick a seeded user', so an empty DB means an unusable
+    app. Guarded on a user count — seed() itself wipes and regenerates, so it must
+    never run against a database that already has data.
+    Set AUTO_SEED=0 to disable (e.g. once on a real, persistent database).
+    """
+    if os.getenv("AUTO_SEED", "1") != "1":
+        return
+    with Session(engine) as s:
+        if s.exec(select(User)).first():
+            return                      # already has data — leave it alone
+    print("[startup] empty database detected — seeding…")
+    from app.seed import seed
+    seed()
+    print("[startup] seed complete")
+
+
 @api.on_event("startup")
 async def startup():
     init_db()
+    _seed_if_empty()
     # The simulator mutates claim data (advances statuses, reassigns claims) to
     # power the live dashboard demo. It's OFF by default so it can't corrupt the
     # analytics/NL2SQL data. Set ENABLE_SIMULATOR=1 to run the realtime demo.

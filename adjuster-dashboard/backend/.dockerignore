@@ -1,0 +1,15 @@
+# never bake the local database into the image — it must be seeded fresh,
+# and shipping it would leak local data into a public container registry
+dashboard.db
+*.db
+*.sqlite
+*.sqlite3
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.*
+gen_schema_profiles.py

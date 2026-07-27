@@ -4,7 +4,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from agent import build_graph, stream_chat
+from agent import build_graph, stream_chat, _resolve_caller
 from langchain_core.messages import ToolMessage
 import json
 import traceback
@@ -22,6 +22,22 @@ class ChatRequest(BaseModel):
     message: str
     thread_id: str
 
+
+async def _scoped_config(token: str, thread_id: str) -> dict:
+    """Build the LangGraph config, namespacing the thread by the AUTHENTICATED user.
+
+    Never trust the client's thread_id on its own: the frontend uses a guessable
+    value (`user-{id}`), so without this an attacker could pass someone else's
+    thread_id to /approve and approve THEIR pending write — a complete bypass of
+    the human-in-the-loop gate. Prefixing with the user id resolved from the
+    bearer token makes another user's thread unreachable.
+    """
+    user_id, _role = await _resolve_caller(token)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or missing token")
+    return {"configurable": {"thread_id": f"{user_id}:{thread_id}"}}
+
+
 @app.get("/")
 def hello():
     return {"message": "hello world", "service": "adjuster-copilot", "phase": 2}
@@ -29,7 +45,7 @@ def hello():
 @app.post("/chat")
 async def chat(req: ChatRequest, authorization: str = Header(...)):
     token = authorization.removeprefix("Bearer ").strip()
-    config = {"configurable": {"thread_id": req.thread_id}}
+    config = await _scoped_config(token, req.thread_id)
 
     async def event_stream():
         try:
@@ -61,7 +77,7 @@ async def chat(req: ChatRequest, authorization: str = Header(...)):
 @app.post("/approve")
 async def approve(req: ChatRequest, authorization: str = Header(...)):
     token = authorization.removeprefix("Bearer ").strip()
-    config = {"configurable": {"thread_id": req.thread_id}}
+    config = await _scoped_config(token, req.thread_id)
     try:
         async with build_graph(adjuster_token=token) as graph:
             snapshot = await graph.aget_state(config)
@@ -78,7 +94,7 @@ async def approve(req: ChatRequest, authorization: str = Header(...)):
 @app.post("/reject")
 async def reject(req: ChatRequest, authorization: str = Header(...)):
     token = authorization.removeprefix("Bearer ").strip()
-    config = {"configurable": {"thread_id": req.thread_id}}
+    config = await _scoped_config(token, req.thread_id)
     try:
         async with build_graph(adjuster_token=token) as graph:
             snapshot = await graph.aget_state(config)

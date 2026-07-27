@@ -26,7 +26,11 @@ _SQL_GRAPH = build_sql_graph()
 class State(TypedDict):
     messages: Annotated[list, add_messages]
 
-WRITE_TOOLS = {"update_claim_status"}
+# Every tool that MUTATES claim data must route through the `action` node so it
+# pauses for human approval. add_note_to_claim writes a Conversation row and
+# broadcasts on the WS hub; reassign_claim moves a claim between adjusters —
+# both were previously executing ungated.
+WRITE_TOOLS = {"update_claim_status", "add_note_to_claim", "reassign_claim"}
 
 # confirmed via a direct A/B test: without this, the model cites sources in
 # vague prose ("the adjuster authority matrix") instead of the exact file name.
@@ -42,8 +46,10 @@ def router_after_agent(state: State):
     last_message = state["messages"][-1]
     if not last_message.tool_calls:
         return END
-    last_tool_call = last_message.tool_calls[-1]
-    if last_tool_call["name"] in WRITE_TOOLS:
+    # Check EVERY call in the batch, not just the last one. The model can emit
+    # parallel tool calls; if a write sat anywhere but the final position we used
+    # to route the whole batch to `tools`, skipping the approval gate entirely.
+    if any(call["name"] in WRITE_TOOLS for call in last_message.tool_calls):
         return "action"
     return "tools"
 
