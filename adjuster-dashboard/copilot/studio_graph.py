@@ -29,6 +29,11 @@ from langchain_openai import AzureChatOpenAI
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from langchain_mcp_adapters.tools import load_mcp_tools
+from langchain_core.tools import tool
+from sql_graph import build_sql_graph
+
+# the NL2SQL subgraph — compiled once and reused for the dev server's lifetime
+_SQL_GRAPH = build_sql_graph()
 
 HERE = Path(__file__).resolve().parent
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8100")
@@ -64,14 +69,17 @@ _stack: AsyncExitStack | None = None
 _graph = None
 
 
-async def _get_dev_token() -> str:
-    """Log in as the demo adjuster to get a JWT for the MCP tools."""
+async def _get_dev_token():
+    """Log in as the demo adjuster; return (token, user_id, role) — token for the
+    MCP tools, id/role for the NL2SQL subgraph's scoping."""
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{DASHBOARD_URL}/auth/login", data={"email": STUDIO_EMAIL}
         )
         resp.raise_for_status()
-        return resp.json()["access_token"]
+        data = resp.json()
+    user = data.get("user", {})
+    return data["access_token"], user.get("id"), user.get("role")
 
 
 async def make_graph(config=None):
@@ -80,7 +88,7 @@ async def make_graph(config=None):
     if _graph is not None:
         return _graph
 
-    token = await _get_dev_token()
+    token, sql_user_id, sql_role = await _get_dev_token()
     server_params = StdioServerParameters(
         command="python",
         args=[str(HERE / "mcp_server.py")],
@@ -96,6 +104,23 @@ async def make_graph(config=None):
     session = await _stack.enter_async_context(ClientSession(read, write))
     await session.initialize()
     tools = await load_mcp_tools(session)
+
+    @tool
+    def query_claims_data(question: str) -> str:
+        """Answer AGGREGATE / ANALYTICAL questions about your claims by running
+        SQL: counts, sums, averages, group-by, trends — e.g. 'how many claims by
+        status', 'average estimate by month', 'fraud rate by team'. Use this when
+        the answer needs math across many claims, not a single lookup. Scoped to
+        the claims you may see."""
+        if sql_user_id is None:
+            return "Cannot run analytics: no authenticated user."
+        final = _SQL_GRAPH.invoke({
+            "question": question, "user_id": sql_user_id,
+            "role": sql_role, "attempts": 0,
+        })
+        return final.get("answer", "No result.")
+
+    tools = list(tools) + [query_claims_data]
     write_tools = [t for t in tools if t.name in WRITE_TOOLS]
     read_tools = [t for t in tools if t.name not in WRITE_TOOLS]
 

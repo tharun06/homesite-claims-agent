@@ -105,6 +105,51 @@ SYSTEM_LINES = [
     "Voice call transcribed and added to thread.",
 ]
 
+# ── Realistic distribution knobs ─────────────────────────────────────────────
+SLA_DAYS = 30                # working window before a claim breaches SLA
+BASE_FRAUD_RATE = 0.06       # ~6% baseline, then multiplied by region + peril signal
+
+# some perils are simply more common than others
+PERIL_WEIGHTS = {
+    PerilType.COLLISION: 30, PerilType.COMPREHENSIVE: 22, PerilType.GLASS: 16,
+    PerilType.WEATHER: 14, PerilType.VANDALISM: 10, PerilType.THEFT: 8,
+}
+# typical repair / loss cost band per peril (USD)
+PERIL_AMOUNT = {
+    PerilType.GLASS: (200, 900),      PerilType.VANDALISM: (500, 4000),
+    PerilType.THEFT: (3000, 26000),   PerilType.WEATHER: (800, 9000),
+    PerilType.COLLISION: (1500, 20000), PerilType.COMPREHENSIVE: (1000, 15000),
+}
+# deliberate fraud SIGNAL so "fraud by team / by peril" tells a real story
+REGION_FRAUD_MULT = {"West": 1.9, "Southwest": 1.3, "Midwest": 1.0,
+                     "Southeast": 0.9, "Northeast": 0.7}
+PERIL_FRAUD_MULT = {
+    PerilType.THEFT: 2.6, PerilType.VANDALISM: 1.8, PerilType.COLLISION: 1.0,
+    PerilType.COMPREHENSIVE: 1.0, PerilType.WEATHER: 0.6, PerilType.GLASS: 0.4,
+}
+
+
+def pick_status(age_days: int, fraud_flagged: bool) -> ClaimStatus:
+    """Status correlates with claim age (a real lifecycle funnel) and fraud,
+    so a queue snapshot looks believable: recent claims are in-flight, older
+    ones are resolved, fraud claims sit in investigation / SIU."""
+    S = ClaimStatus
+    if fraud_flagged:
+        if age_days < 30:
+            return random.choices([S.SIU_FLAGGED, S.INVESTIGATION], [0.7, 0.3])[0]
+        return random.choices([S.SIU_FLAGGED, S.DENIED, S.INVESTIGATION], [0.5, 0.3, 0.2])[0]
+    if age_days < 7:
+        return random.choices([S.FNOL, S.UNDER_REVIEW], [0.6, 0.4])[0]
+    if age_days < 21:
+        return random.choices([S.UNDER_REVIEW, S.INVESTIGATION, S.APPRAISAL], [0.4, 0.3, 0.3])[0]
+    if age_days < 60:
+        return random.choices([S.APPRAISAL, S.PENDING_APPROVAL, S.APPROVED, S.UNDER_REVIEW],
+                              [0.30, 0.30, 0.25, 0.15])[0]
+    if age_days < 150:
+        return random.choices([S.APPROVED, S.PENDING_APPROVAL, S.CLOSED, S.DENIED],
+                              [0.45, 0.15, 0.30, 0.10])[0]
+    return random.choices([S.CLOSED, S.APPROVED, S.DENIED], [0.55, 0.35, 0.10])[0]
+
 
 def vin():
     return "".join(random.choice(VIN_CHARS) for _ in range(17))
@@ -209,44 +254,69 @@ def seed():
         s.commit()
 
         # ── Claims + Tasks + Conversations + Events ──
-        statuses = list(ClaimStatus)
+        team_region = {t.id: t.region for t in teams}
+        # mild workload skew so "which adjuster is busiest" is a real answer
+        adj_weights = [1.0] * len(adjusters)
+        for idx, w in [(0, 2.4), (1, 1.8), (2, 1.5), (7, 1.4)]:
+            if idx < len(adj_weights):
+                adj_weights[idx] = w
+        today = date.today()
+        now = datetime.utcnow()
+
         for _ in range(N_CLAIMS):
             v = random.choice(vehicles)
             pol = next(p for p in policies if p.id == v.policy_id)
             cust = next(c for c in customers if c.id == pol.customer_id)
-            adjuster = random.choice(adjusters)
+            adjuster = random.choices(adjusters, weights=adj_weights)[0]
+            region = team_region.get(adjuster.team_id, "Midwest")
 
-            status = random.choices(
-                statuses,
-                weights=[10, 18, 14, 12, 15, 12, 6, 14, 4],  # PENDING_APPROVAL increased to 15
-            )[0]
-            fraud_score = round(random.uniform(0, 1), 2)
-            fraud_flagged = status == ClaimStatus.SIU_FLAGGED or fraud_score >= 0.75
-            if fraud_flagged and status != ClaimStatus.SIU_FLAGGED and random.random() > 0.5:
-                status = ClaimStatus.SIU_FLAGGED
+            peril = random.choices(list(PERIL_WEIGHTS), weights=list(PERIL_WEIGHTS.values()))[0]
 
-            loss = fake.date_between(start_date="-90d", end_date="today")
-            reported = loss + timedelta(days=random.randint(0, 5))
-            est = round(random.uniform(300, 14000), 2)
+            # dates spread across the last 12 months
+            age_days = random.randint(1, 365)
+            loss = today - timedelta(days=age_days)
+            reported = loss + timedelta(days=random.randint(0, 4))
+
+            # fraud with a deliberate region + peril signal (min-capped)
+            prob = min(0.55, BASE_FRAUD_RATE * REGION_FRAUD_MULT[region] * PERIL_FRAUD_MULT[peril])
+            fraud_flagged = random.random() < prob
+            fraud_score = (round(random.uniform(0.72, 0.98), 2) if fraud_flagged
+                           else round(random.uniform(0.0, 0.5), 2))
+
+            status = pick_status(age_days, fraud_flagged)
+
+            lo, hi = PERIL_AMOUNT[peril]
+            est = round(random.uniform(lo, hi), 2)
+
+            resolved = status in (ClaimStatus.CLOSED, ClaimStatus.DENIED)
+            reserve = 0.0 if resolved else round(est * random.uniform(0.85, 1.1), 2)
+            approved = (round(max(0.0, est - pol.deductible), 2)
+                        if status in (ClaimStatus.APPROVED, ClaimStatus.CLOSED) else None)
+
+            reported_dt = datetime.combine(reported, datetime.min.time())
+            sla_due = reported_dt + timedelta(days=SLA_DAYS)
+            updated = reported_dt + timedelta(days=random.randint(1, max(1, min(age_days, 140))),
+                                              hours=random.randint(0, 23))
+            if updated > now:
+                updated = now - timedelta(hours=random.randint(1, 48))
+
             lat, lng, city, _ = nc_location()
-
             claim = Claim(
                 claim_number=f"CLM-{fake.unique.random_number(digits=6, fix_len=True)}",
                 policy_id=pol.id, vehicle_id=v.id, adjuster_id=adjuster.id,
-                status=status, peril_type=random.choice(list(PerilType)),
+                status=status, peril_type=peril,
                 description=random.choice(CUSTOMER_LINES),
                 loss_date=loss, reported_date=reported,
                 incident_city=city, incident_state="NC",
                 incident_lat=lat, incident_lng=lng,
                 estimated_amount=est,
-                reserve_amount=round(est * random.uniform(0.8, 1.1), 2),
-                approved_amount=(round(max(0, est - pol.deductible), 2)
-                                 if status == ClaimStatus.APPROVED else None),
+                reserve_amount=reserve,
+                approved_amount=approved,
                 deductible=pol.deductible,
                 fraud_score=fraud_score, fraud_flagged=fraud_flagged,
-                sla_due_date=datetime.utcnow() + timedelta(days=random.randint(-3, 14)),
-                created_at=datetime.combine(reported, datetime.min.time()),
-                updated_at=datetime.utcnow() - timedelta(hours=random.randint(0, 72)),
+                sla_due_date=sla_due,
+                created_at=reported_dt,
+                updated_at=updated,
             )
             s.add(claim); s.commit(); s.refresh(claim)
 

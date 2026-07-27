@@ -15,6 +15,14 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from langchain_mcp_adapters.tools import load_mcp_tools
 
+import httpx
+from langchain_core.tools import tool
+from sql_graph import build_sql_graph
+
+# the NL2SQL subgraph — compiled once and reused across every request
+_SQL_GRAPH = build_sql_graph()
+
+
 class State(TypedDict):
     messages: Annotated[list, add_messages]
 
@@ -39,6 +47,24 @@ def router_after_agent(state: State):
         return "action"
     return "tools"
 
+
+async def _resolve_caller(token: str | None):
+    """Resolve (user_id, role) from the caller's token via the backend /me.
+    This is how the NL2SQL subgraph gets its scope — from the JWT, never the LLM.
+    Returns (None, 'adjuster') when there's no valid token."""
+    if not token:
+        return None, "adjuster"
+    url = os.getenv("DASHBOARD_URL", "http://localhost:8100")
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{url}/me", headers={"Authorization": f"Bearer {token}"})
+            r.raise_for_status()
+            me = r.json()
+        return me["id"], me["role"]
+    except Exception:
+        return None, "adjuster"
+
+
 @asynccontextmanager
 async def build_graph(adjuster_token: str | None = None):
     server_params = StdioServerParameters(
@@ -57,6 +83,29 @@ async def build_graph(adjuster_token: str | None = None):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tools = await load_mcp_tools(session)
+
+                # NL2SQL subgraph as one local tool. Resolve the caller (id +
+                # role) from their token so the subgraph scopes SQL to exactly
+                # what they may see — the scope comes from the JWT, not the LLM.
+                sql_user_id, sql_role = await _resolve_caller(adjuster_token)
+
+                @tool
+                def query_claims_data(question: str) -> str:
+                    """Answer AGGREGATE / ANALYTICAL questions about your claims by
+                    running SQL: counts, sums, averages, group-by, trends — e.g.
+                    'how many claims by status', 'average estimate by month',
+                    'fraud rate by team', 'total reserve on open claims'. Use this
+                    when the answer needs math across many claims rather than a
+                    single lookup. Automatically scoped to the claims you may see."""
+                    if sql_user_id is None:
+                        return "Cannot run analytics: no authenticated user."
+                    final = _SQL_GRAPH.invoke({
+                        "question": question, "user_id": sql_user_id,
+                        "role": sql_role, "attempts": 0,
+                    })
+                    return final.get("answer", "No result.")
+
+                tools = list(tools) + [query_claims_data]
                 write_tools = [t for t in tools if t.name in WRITE_TOOLS]
                 read_tools = [t for t in tools if t.name not in WRITE_TOOLS]
                 llm = AzureChatOpenAI(
@@ -95,6 +144,8 @@ TOOL_STATUS = {
     "add_note_to_claim": "adding your note",
     "reassign_claim": "reassigning the claim",
     "search_policy_docs": "searching policy documents",
+    "search_similar_claims": "searching for similar past claims",
+    "query_claims_data": "crunching the numbers",
 }
 
 
@@ -106,6 +157,12 @@ async def stream_chat(graph, message: str, config: dict):
     ):
         kind = event["event"]
         if kind == "on_chat_model_stream":
+            # Only stream the top-level agent's tokens. The query_claims_data
+            # subgraph runs its own LLM calls (select_tables / generate_sql) that
+            # also emit chat-model events; without this filter the raw SQL would
+            # leak into the user's answer.
+            if event.get("metadata", {}).get("langgraph_node") != "agent":
+                continue
             text = event["data"]["chunk"].content
             if text:
                 yield {"delta": text}

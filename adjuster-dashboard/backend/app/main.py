@@ -5,6 +5,7 @@ Run:  uvicorn app.main:api --reload --port 8100
 Docs: http://localhost:8100/docs
 """
 import asyncio
+import os
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,7 +37,11 @@ api.include_router(routes_directory.router, tags=["directory"])
 @api.on_event("startup")
 async def startup():
     init_db()
-    asyncio.create_task(run_simulator())
+    # The simulator mutates claim data (advances statuses, reassigns claims) to
+    # power the live dashboard demo. It's OFF by default so it can't corrupt the
+    # analytics/NL2SQL data. Set ENABLE_SIMULATOR=1 to run the realtime demo.
+    if os.getenv("ENABLE_SIMULATOR", "0") == "1":
+        asyncio.create_task(run_simulator())
 
 
 @api.on_event("shutdown")
