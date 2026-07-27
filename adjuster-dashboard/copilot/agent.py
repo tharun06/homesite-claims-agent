@@ -85,7 +85,12 @@ async def build_graph(adjuster_token: str | None = None):
     )
     # tools that CHANGE data — these must pause for human approval
 
-    async with AsyncSqliteSaver.from_conn_string("copilot.db") as saver:
+    # COPILOT_DB points at the mounted Azure Files share in deployment, so
+    # conversation history and any pending human-approval state survive a
+    # restart. A relative path lands on ephemeral container disk and is lost.
+    async with AsyncSqliteSaver.from_conn_string(
+        os.getenv("COPILOT_DB", "copilot.db")
+    ) as saver:
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
