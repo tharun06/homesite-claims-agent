@@ -18,8 +18,7 @@ env:
   # Vite inlines VITE_* at BUILD time, so these are baked into the bundle here.
   # Changing a URL requires a rebuild — it is not runtime config.
   VITE_API_BASE: https://homesite-backend.jollycoast-c20a8d3a.westus2.azurecontainerapps.io
-  # the copilot is not deployed yet — update this and re-run once it is
-  VITE_COPILOT_BASE: http://localhost:8200
+  VITE_COPILOT_BASE: https://homesite-copilot.jollycoast-c20a8d3a.westus2.azurecontainerapps.io
 
 jobs:
   deploy:
