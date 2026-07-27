@@ -18,6 +18,7 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 import httpx
 from langchain_core.tools import tool
 from sql_graph import build_sql_graph
+from sql_runtime import database_available
 
 # the NL2SQL subgraph — compiled once and reused across every request
 _SQL_GRAPH = build_sql_graph()
@@ -105,6 +106,10 @@ async def build_graph(adjuster_token: str | None = None):
                     single lookup. Automatically scoped to the claims you may see."""
                     if sql_user_id is None:
                         return "Cannot run analytics: no authenticated user."
+                    if not database_available():
+                        return ("Analytics are unavailable in this deployment: the "
+                                "claims database is not reachable from the copilot "
+                                "service. Use list_my_claims or queue_metrics instead.")
                     final = _SQL_GRAPH.invoke({
                         "question": question, "user_id": sql_user_id,
                         "role": sql_role, "attempts": 0,

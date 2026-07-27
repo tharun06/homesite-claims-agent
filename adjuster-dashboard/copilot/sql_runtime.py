@@ -30,6 +30,18 @@ DB_PATH = os.environ.get("DASHBOARD_DB") or os.path.abspath(
 )
 
 
+def database_available() -> bool:
+    """True if the claims database file is reachable from this process.
+
+    NL2SQL reads the backend's SQLite file directly off the filesystem, which only
+    works when both run on the same machine. Once the copilot is deployed as its
+    own container the file is not there, so callers check this first and report a
+    clear message instead of throwing 'unable to open database file'. The real fix
+    is moving to a networked database (see ROADMAP.md, Phase 2).
+    """
+    return os.path.exists(DB_PATH)
+
+
 # ── Layer 1: the read-only connection ────────────────────────────────────────
 def _connect_ro() -> sqlite3.Connection:
     """Open dashboard.db read-only. The `mode=ro` URI makes SQLite refuse every

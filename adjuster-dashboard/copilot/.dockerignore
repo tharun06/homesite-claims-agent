@@ -1,0 +1,11 @@
+# never ship local databases or checkpoints into a public image
+*.db
+*.sqlite
+*.sqlite3
+
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.md
+langgraph.json

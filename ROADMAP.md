@@ -122,6 +122,28 @@ Known blockers to clear as you go:
 
 ---
 
+## ⏸️ Deferred — continuous deployment for containers (the `:latest` gap)
+
+**Known gap, deliberately parked.** The backend workflow builds a new image on
+every push, but **Azure never picks it up**. Container Apps pulled `ghcr.io/...:latest`
+once at creation and pinned that revision to the image it got; re-pushing the same
+tag notifies nothing. The workflow goes green, the image is in the registry, and the
+running app keeps serving old code — a silent no-op.
+
+(The frontend does *not* have this problem: the Static Web Apps action uploads files
+straight to Azure, so it genuinely auto-deploys.)
+
+**The fix, when we come back to it:**
+1. Deploy by **immutable SHA tag**, never `:latest` — `:latest` is the root cause.
+2. Add a deploy step after the build: `az containerapp update --image ghcr.io/...:${{ github.sha }}`.
+3. Authenticate GitHub → Azure with **OIDC federated credentials** (no stored secret):
+   app registration + service principal + a federated credential scoped to this repo,
+   plus an RBAC role assignment on the resource group.
+   ✅ Verified: app registration **is** permitted in this tenant.
+4. Until then, deploying backend/copilot changes is a **manual** `az containerapp update`.
+
+---
+
 ## Phase 2 — Get off SQLite (blocks everything multi-container)
 
 `database.py` writes `dashboard.db` to local disk. Container Apps storage is
