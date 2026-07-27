@@ -40,7 +40,7 @@ class SqlState(TypedDict, total=False):
 # ── Node 1: ground_values ────────────────────────────────────────────────────
 GROUND_COLUMNS = [
     ("my_claims", "incident_city"),   # scoped: only cities the caller may see
-    ("user", "name"),                 # org directory (not per-claim sensitive)
+    ("app_users", "name"),                 # org directory (not per-claim sensitive)
     ("team", "name"),
 ]
 
@@ -81,7 +81,7 @@ def _table_catalog() -> str:
     )
 
 def _parse_tables(text: str) -> list:
-    known = set(SEMANTIC_PROFILES)                 # {'claim','user','team'}
+    known = set(SEMANTIC_PROFILES)                 # {'claim','app_users','team'}
     picked = []
     for tok in re.split(r"[,\n]", text):
         t = tok.strip().lower().strip("`\"'.-* ")
@@ -126,10 +126,12 @@ def _render_schema(tables=None) -> str:
 
 
 _SYSTEM = (
-    "You are a SQLite expert. Write ONE read-only SELECT that answers the question.\n"
+    "You are a SQL expert. Write ONE read-only SELECT that answers the question.\n"
     "Rules:\n"
     "- Query the `my_claims` view for all claim data. NEVER reference a table named `claim`.\n"
-    "- You may JOIN to `user` (my_claims.adjuster_id = user.id) and `team` (user.team_id = team.id).\n"
+    "- You may JOIN to `app_users` (my_claims.adjuster_id = app_users.id) and `team` "
+    "(app_users.team_id = team.id). NEVER write `user`: it is a reserved word that silently "
+    "resolves to the current-user function instead of the table, giving a wrong answer.\n"
     "- my_claims is ALREADY scoped to the current user. Do NOT add any adjuster_id/user filter "
     "for permission reasons; only filter adjuster_id if the question names a specific adjuster.\n"
     "- Use the EXACT stored strings from the schema enums and the sample values "

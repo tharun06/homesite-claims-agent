@@ -263,7 +263,7 @@ def seed():
         today = date.today()
         now = datetime.utcnow()
 
-        for _ in range(N_CLAIMS):
+        for i in range(N_CLAIMS):
             v = random.choice(vehicles)
             pol = next(p for p in policies if p.id == v.policy_id)
             cust = next(c for c in customers if c.id == pol.customer_id)
@@ -318,7 +318,12 @@ def seed():
                 created_at=reported_dt,
                 updated_at=updated,
             )
-            s.add(claim); s.commit(); s.refresh(claim)
+            # flush (not commit) to get the generated PK: it assigns the id
+            # without ending the transaction, so the whole batch commits once
+            # below. Committing per claim means ~800 network round trips, which
+            # is unnoticeable on local SQLite and painfully slow against a
+            # remote Postgres.
+            s.add(claim); s.flush()
 
             # tasks (active claims only)
             if status not in (ClaimStatus.CLOSED, ClaimStatus.DENIED, ClaimStatus.APPROVED):
@@ -365,7 +370,11 @@ def seed():
             s.add(ClaimEvent(claim_id=claim.id, event_type="status_change",
                              detail=f"Status: {status.value}", actor=adjuster.name,
                              timestamp=claim.updated_at))
-            s.commit()
+            # commit in batches rather than per claim — see the flush() note above
+            if (i + 1) % 50 == 0:
+                s.commit()
+                print(f"   seeded {i + 1}/{N_CLAIMS} claims")
+        s.commit()
 
         # ── Summary ──
         n = lambda model: len(s.exec(select(model)).all())

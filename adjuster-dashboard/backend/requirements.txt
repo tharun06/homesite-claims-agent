@@ -10,3 +10,7 @@ python-multipart==0.0.32
 # faker is a RUNTIME dependency, not dev-only: the app auto-seeds an empty
 # database on startup (see app/main.py::_seed_if_empty).
 faker==40.23.0
+
+# PostgreSQL driver (deployed). SQLite needs no driver, so this is only
+# exercised when DATABASE_URL points at Postgres.
+psycopg[binary]==3.3.4

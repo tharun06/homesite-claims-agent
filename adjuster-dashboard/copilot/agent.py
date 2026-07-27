@@ -55,6 +55,42 @@ def router_after_agent(state: State):
     return "tools"
 
 
+@asynccontextmanager
+async def _checkpointer():
+    """The graph's memory: after every node LangGraph saves state here, which is
+    what lets the graph PAUSE at the `action` node and later resume on /approve.
+
+    Postgres when CHECKPOINT_DATABASE_URL is set (deployed), SQLite otherwise
+    (local dev). Postgres matters because container storage is ephemeral: with a
+    local file, conversation history and any pending approval die on restart, and
+    two replicas cannot see each other's state.
+
+    Note the DSN must be the plain `postgresql://` form — the saver drives psycopg
+    directly, so SQLAlchemy's `postgresql+psycopg://` prefix is not valid here.
+
+    WINDOWS: leave CHECKPOINT_DATABASE_URL unset locally. async psycopg refuses to
+    run on asyncio's ProactorEventLoop, but that is exactly the loop Windows needs
+    in order to spawn the stdio MCP server subprocess — SelectorEventLoop cannot
+    create subprocesses on Windows. The two requirements are mutually exclusive
+    there, so local dev uses the SQLite saver. Linux containers have no such
+    conflict and use Postgres.
+    """
+    url = os.getenv("CHECKPOINT_DATABASE_URL", "")
+    if url.startswith("postgres"):
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        async with AsyncPostgresSaver.from_conn_string(url) as saver:
+            # creates the checkpoints / checkpoint_writes / checkpoint_blobs
+            # tables. The SQLite saver does this implicitly; Postgres needs it
+            # called explicitly, and it is safe to re-run.
+            await saver.setup()
+            yield saver
+    else:
+        async with AsyncSqliteSaver.from_conn_string(
+            os.getenv("COPILOT_DB", "copilot.db")
+        ) as saver:
+            yield saver
+
+
 async def _resolve_caller(token: str | None):
     """Resolve (user_id, role) from the caller's token via the backend /me.
     This is how the NL2SQL subgraph gets its scope — from the JWT, never the LLM.
@@ -85,12 +121,7 @@ async def build_graph(adjuster_token: str | None = None):
     )
     # tools that CHANGE data — these must pause for human approval
 
-    # COPILOT_DB points at the mounted Azure Files share in deployment, so
-    # conversation history and any pending human-approval state survive a
-    # restart. A relative path lands on ephemeral container disk and is lost.
-    async with AsyncSqliteSaver.from_conn_string(
-        os.getenv("COPILOT_DB", "copilot.db")
-    ) as saver:
+    async with _checkpointer() as saver:
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()

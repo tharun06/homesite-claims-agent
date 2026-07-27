@@ -21,11 +21,11 @@ SEMANTIC_PROFILES = {
             "region": {"type": "str", "description": "US region the team covers. One of: Northeast, Southeast, Midwest, West, Southwest."},
         },
         "relations": [
-            "user.team_id -> team.id (a team has many users)",
+            "app_users.team_id -> team.id (a team has many users)",
         ],
     },
-    "user": {
-        "description": "A staff member — adjuster, senior adjuster, SIU investigator, or admin. Claims are assigned to users via claim.adjuster_id.",
+    "app_users": {
+        "description": "A staff member — adjuster, senior adjuster, SIU investigator, or admin. Claims are assigned to users via claim.adjuster_id. NOTE: query this as `app_users` — the underlying table name is a reserved word.",
         "columns": {
             "id":      {"type": "int",  "description": "Primary key. Join target for claim.adjuster_id."},
             "name":    {"type": "str",  "description": "Full name of the staff member. FREE TEXT — ground before filtering."},
@@ -35,8 +35,8 @@ SEMANTIC_PROFILES = {
             "active":  {"type": "bool", "description": "Whether the user is currently active (almost always true)."},
         },
         "relations": [
-            "user.team_id -> team.id",
-            "claim.adjuster_id -> user.id (a user owns many claims)",
+            "app_users.team_id -> team.id",
+            "claim.adjuster_id -> app_users.id (a user owns many claims)",
         ],
     },
     "claim": {
@@ -44,7 +44,7 @@ SEMANTIC_PROFILES = {
         "columns": {
             "id":               {"type": "int",   "description": "Primary key."},
             "claim_number":     {"type": "str",   "description": "Human-facing claim ID, e.g. 'CLM-100569'. FREE TEXT — ground before filtering."},
-            "adjuster_id":      {"type": "int",   "description": "FK to user.id — the adjuster who owns this claim. MANDATORY SCOPE FILTER: a plain adjuster may only see rows where adjuster_id = their own id."},
+            "adjuster_id":      {"type": "int",   "description": "FK to app_users.id — the adjuster who owns this claim. MANDATORY SCOPE FILTER: a plain adjuster may only see rows where adjuster_id = their own id."},
             "status":           {"type": "str",   "description": "Lifecycle stage, stored as these exact strings (note UNDER_SCORES, not spaces): FNOL, UNDER_REVIEW, INVESTIGATION, APPRAISAL, PENDING_APPROVAL, APPROVED, DENIED, CLOSED, SIU_FLAGGED. A claim is 'resolved' when status IN ('CLOSED','DENIED')."},
             "peril_type":       {"type": "str",   "description": "Cause of loss, stored as: COLLISION, COMPREHENSIVE, THEFT, VANDALISM, WEATHER, GLASS."},
             "loss_date":        {"type": "date",  "description": "Date the incident/loss occurred."},
@@ -62,7 +62,7 @@ SEMANTIC_PROFILES = {
             "updated_at":       {"type": "datetime", "description": "When the claim was last updated."},
         },
         "relations": [
-            "claim.adjuster_id -> user.id",
+            "claim.adjuster_id -> app_users.id",
             # claim.policy_id -> policy.id and claim.vehicle_id -> vehicle.id exist in
             # the DB but are intentionally omitted — those tables aren't profiled.
         ],
