@@ -1,5 +1,9 @@
 // Thin API client. Token stored in localStorage; every call sends it.
-const BASE = "http://localhost:8100";
+//
+// Service URLs are baked in at BUILD time from Vite env vars (VITE_* only —
+// anything else is not exposed to client code). They default to localhost so the
+// local dev loop is unchanged; the container build passes the deployed URLs.
+const BASE = import.meta.env.VITE_API_BASE || "http://localhost:8100";
 
 export function getToken() {
   return localStorage.getItem("token");
@@ -57,10 +61,13 @@ export const api = {
     req(`/repair-shops?claim_id=${claimId}&radius_km=${radius}`),
 };
 
-export const WS_BASE = "ws://localhost:8100/ws";
+// Derive the WebSocket URL from BASE so it follows http->ws / https->wss.
+export const WS_BASE =
+  import.meta.env.VITE_WS_BASE ||
+  `${BASE.replace(/^http/, "ws")}/ws`;
 
 // Copilot service (separate process, port 8200)
-const COPILOT = "http://localhost:8200";
+const COPILOT = import.meta.env.VITE_COPILOT_BASE || "http://localhost:8200";
 
 function threadId() {
   const user = getUser();

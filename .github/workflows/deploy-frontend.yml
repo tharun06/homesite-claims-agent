@@ -1,0 +1,49 @@
+name: Deploy frontend
+
+# The frontend is NOT containerized. Vite compiles it to static files and those
+# files are uploaded straight to Azure Static Web Apps (free tier, global CDN,
+# no cold start, and it doesn't consume the shared Container Apps compute grant).
+#
+# Contrast with build-backend.yml: the backend is a running Python process, so it
+# needs an image + a registry. The frontend is just files, so it needs neither.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'adjuster-dashboard/frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+env:
+  # Vite inlines VITE_* at BUILD time, so these are baked into the bundle here.
+  # Changing a URL requires a rebuild — it is not runtime config.
+  VITE_API_BASE: https://homesite-backend.jollycoast-c20a8d3a.westus2.azurecontainerapps.io
+  # the copilot is not deployed yet — update this and re-run once it is
+  VITE_COPILOT_BASE: http://localhost:8200
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: adjuster-dashboard/frontend/package-lock.json
+
+      - name: Install and build
+        working-directory: adjuster-dashboard/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: adjuster-dashboard/frontend/dist
+          skip_app_build: true          # already built above
+          skip_api_build: true
