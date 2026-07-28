@@ -307,6 +307,19 @@ if __name__ == "__main__":
         mcp.settings.stateless_http = True
         mcp.settings.host = "0.0.0.0"
         mcp.settings.port = int(os.getenv("PORT", "8000"))
+
+        # The SDK rejects requests whose Host header it does not recognise
+        # (DNS-rebinding protection) — behind Azure ingress that means every
+        # request gets 421 "Invalid Host header" until the public FQDN is
+        # allowed. MCP_ALLOWED_HOSTS is a comma-separated list; "*" allows any.
+        allowed = os.getenv("MCP_ALLOWED_HOSTS", "").strip()
+        if allowed:
+            from mcp.server.transport_security import TransportSecuritySettings
+            hosts = [h.strip() for h in allowed.split(",") if h.strip()]
+            mcp.settings.transport_security = TransportSecuritySettings(
+                allowed_hosts=hosts,
+                allowed_origins=hosts,
+            )
         mcp.run(transport="streamable-http")
     else:
         mcp.run()
