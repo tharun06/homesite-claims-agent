@@ -6,8 +6,16 @@ from mcp.server.fastmcp import FastMCP
 
 
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:8100")
+
+# Two ways this server gets an identity:
+#
+#  1. ADJUSTER_TOKEN — a token handed in at startup. Used when the copilot spawns
+#     this file as a stdio subprocess, and by Claude Desktop's config.
+#  2. SERVICE_EMAIL — the server logs in itself and refreshes as needed. Required
+#     when running as a long-lived HTTP service, because backend tokens expire
+#     after 12 hours and a baked-in one would go stale twice a day.
 TOKEN = os.getenv("ADJUSTER_TOKEN", "")
-HEADERS = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {} 
+SERVICE_EMAIL = os.getenv("SERVICE_EMAIL", "")
 SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT", "").rstrip("/")
 SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY", "")
 SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX", "")
@@ -26,18 +34,58 @@ HTTP_TIMEOUT = 60.0
 
 mcp = FastMCP("homesite-claims")
 
-def _get(path: str, params: dict | None = None) -> dict:
-    """Get data from the dashboard API."""
-    response = httpx.get(f"{DASHBOARD_URL}{path}", params=params, headers=HEADERS, timeout=HTTP_TIMEOUT)
+_token_cache: dict[str, str] = {}
+
+
+def _service_login() -> str:
+    """Log in as SERVICE_EMAIL and cache the token."""
+    r = httpx.post(f"{DASHBOARD_URL}/auth/login",
+                   data={"email": SERVICE_EMAIL}, timeout=HTTP_TIMEOUT)
+    r.raise_for_status()
+    _token_cache["token"] = r.json()["access_token"]
+    return _token_cache["token"]
+
+
+def _headers() -> dict:
+    """Auth header for backend calls. A static ADJUSTER_TOKEN wins when present
+    (stdio mode); otherwise use the cached service token, logging in on first
+    use."""
+    if TOKEN:
+        return {"Authorization": f"Bearer {TOKEN}"}
+    if not SERVICE_EMAIL:
+        return {}
+    return {"Authorization": f"Bearer {_token_cache.get('token') or _service_login()}"}
+
+
+def _request(method: str, path: str, **kw) -> dict:
+    """Call the dashboard API, refreshing the service token once on 401.
+
+    Backend tokens expire after 12 hours, so a long-running HTTP server will
+    eventually present a stale one. Retrying after a fresh login keeps it alive
+    without a restart.
+    """
+    url = f"{DASHBOARD_URL}{path}"
+    response = httpx.request(method, url, headers=_headers(), timeout=HTTP_TIMEOUT, **kw)
+    if response.status_code == 401 and SERVICE_EMAIL and not TOKEN:
+        _service_login()
+        response = httpx.request(method, url, headers=_headers(), timeout=HTTP_TIMEOUT, **kw)
     response.raise_for_status()
     return response.json()
+
+
+def _get(path: str, params: dict | None = None) -> dict:
+    """Get data from the dashboard API."""
+    return _request("GET", path, params=params)
 
 
 def _patch(path: str, data: dict | None = None) -> dict:
     """Patch data on the dashboard API."""
-    response = httpx.patch(f"{DASHBOARD_URL}{path}", data=data, headers=HEADERS, timeout=HTTP_TIMEOUT)
-    response.raise_for_status()
-    return response.json()
+    return _request("PATCH", path, data=data)
+
+
+def _post(path: str, data: dict | None = None) -> dict:
+    """Post data to the dashboard API."""
+    return _request("POST", path, data=data)
 
 
 def resolve_claim(claim_number: str) -> dict | None:
@@ -194,13 +242,7 @@ def add_note_to_claim(claim_number: str, note: str) -> str:
     if not claim:
         return json.dumps({"error": "Claim not found"})
 
-    result = httpx.post(
-        f"{DASHBOARD_URL}/claims/{claim['id']}/notes",
-        data={"note": note},
-        headers=HEADERS,
-        timeout=HTTP_TIMEOUT,
-    )
-    result.raise_for_status()
+    _post(f"/claims/{claim['id']}/notes", data={"note": note})
     return json.dumps({"claim_number": claim_number, "ok": True})
 
 @mcp.tool()
@@ -210,13 +252,7 @@ def reassign_claim(claim_number: str, adjuster_id: int) -> str:
     if not claim:
         return json.dumps({"error": "Claim not found"})
 
-    result = httpx.post(
-        f"{DASHBOARD_URL}/claims/{claim['id']}/reassign",
-        data={"adjuster_id": adjuster_id},
-        headers=HEADERS,
-        timeout=HTTP_TIMEOUT,
-    )
-    result.raise_for_status()
+    _post(f"/claims/{claim['id']}/reassign", data={"adjuster_id": adjuster_id})
 
     return json.dumps({
         "claim_number": claim_number,
@@ -261,4 +297,16 @@ def search_similar_claims(query: str) -> str:
     return json.dumps(compact)
 
 if __name__ == "__main__":
-    mcp.run()
+    # stdio by default, so the copilot's subprocess and Claude Desktop keep
+    # working unchanged. The container sets MCP_TRANSPORT=streamable-http to
+    # serve the same tools over HTTP at /mcp instead.
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    if transport == "streamable-http":
+        # stateless: a fresh transport per request, no session affinity needed,
+        # so the app can scale to zero and back without breaking clients.
+        mcp.settings.stateless_http = True
+        mcp.settings.host = "0.0.0.0"
+        mcp.settings.port = int(os.getenv("PORT", "8000"))
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()

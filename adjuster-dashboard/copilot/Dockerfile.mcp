@@ -1,0 +1,23 @@
+# The MCP server as a STANDALONE remote service, speaking Streamable HTTP at /mcp.
+#
+# Same file the copilot spawns over stdio — MCP_TRANSPORT switches the entrypoint.
+# Only the runtime deps are installed here; the LangGraph stack is not needed.
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir "mcp>=1.28,<2" "httpx==0.28.1" "uvicorn[standard]==0.49.0"
+
+COPY mcp_server.py ./
+
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+ENV MCP_TRANSPORT=streamable-http \
+    PORT=8000
+EXPOSE 8000
+
+CMD ["python", "mcp_server.py"]
