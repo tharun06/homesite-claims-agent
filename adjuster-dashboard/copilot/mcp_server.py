@@ -17,18 +17,25 @@ AOAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
 EMBED_DEPLOYMENT = os.getenv("AZURE_EMBEDDING_DEPLOYMENT", "")
 
 
+# The dashboard now runs on a networked Postgres in a different region, so
+# list-style endpoints are far slower than they were against a local SQLite
+# file (/claims ~7.5s for 58 claims). httpx's default timeout is 5s, which
+# made every claims lookup fail. Give backend calls room, and keep Azure
+# calls on a shorter leash.
+HTTP_TIMEOUT = 60.0
+
 mcp = FastMCP("homesite-claims")
 
 def _get(path: str, params: dict | None = None) -> dict:
     """Get data from the dashboard API."""
-    response = httpx.get(f"{DASHBOARD_URL}{path}", params=params, headers=HEADERS)
+    response = httpx.get(f"{DASHBOARD_URL}{path}", params=params, headers=HEADERS, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
 
 def _patch(path: str, data: dict | None = None) -> dict:
     """Patch data on the dashboard API."""
-    response = httpx.patch(f"{DASHBOARD_URL}{path}", data=data, headers=HEADERS)
+    response = httpx.patch(f"{DASHBOARD_URL}{path}", data=data, headers=HEADERS, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -44,7 +51,7 @@ def resolve_claim(claim_number: str) -> dict | None:
 def _embed(text: str) -> list[float]:
     """Turn text into a vector, using the same embedding model that indexed the policy docs."""
     url = f"{AOAI_ENDPOINT}/openai/deployments/{EMBED_DEPLOYMENT}/embeddings?api-version=2023-05-15"
-    response = httpx.post(url, headers={"api-key": AOAI_KEY}, json={"input": text})
+    response = httpx.post(url, headers={"api-key": AOAI_KEY}, json={"input": text}, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
     return response.json()["data"][0]["embedding"]
 
@@ -61,7 +68,7 @@ def _search_policies(query: str, k: int =3) -> list[dict]:
         "top": 5,
         "select": "content,metadata_storage_name"
     }
-    response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload)
+    response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
     return response.json().get("value", [])
 
@@ -86,7 +93,7 @@ def _search_similar_claims(query:str, k:int=5) -> list[dict]:
         "top": 5,
         "select": "claim_number,content,estimated_amount,status"
     }   
-    response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload)
+    response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
     return response.json().get("value", [])
 
@@ -191,6 +198,7 @@ def add_note_to_claim(claim_number: str, note: str) -> str:
         f"{DASHBOARD_URL}/claims/{claim['id']}/notes",
         data={"note": note},
         headers=HEADERS,
+        timeout=HTTP_TIMEOUT,
     )
     result.raise_for_status()
     return json.dumps({"claim_number": claim_number, "ok": True})
@@ -206,6 +214,7 @@ def reassign_claim(claim_number: str, adjuster_id: int) -> str:
         f"{DASHBOARD_URL}/claims/{claim['id']}/reassign",
         data={"adjuster_id": adjuster_id},
         headers=HEADERS,
+        timeout=HTTP_TIMEOUT,
     )
     result.raise_for_status()
 
