@@ -42,3 +42,6 @@ Thumbs.db
 
 # ─── LangGraph local dev state ────────────────────────────
 .langgraph_api/
+
+.mcp_api_appid
+.mcp_client_appid

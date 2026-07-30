@@ -320,6 +320,37 @@ if __name__ == "__main__":
                 allowed_hosts=hosts,
                 allowed_origins=hosts,
             )
+
+        # OAuth 2.1 (Entra ID) — opt-in. Without ENTRA_TENANT_ID +
+        # ENTRA_API_APP_ID the server stays open, so a missing env var can never
+        # leave it half-protected.
+        import mcp_auth
+        if mcp_auth.auth_enabled():
+            from mcp.server.auth.settings import AuthSettings
+            from pydantic import AnyHttpUrl
+
+            public_url = os.getenv("MCP_PUBLIC_URL", "").rstrip("/")
+            # NOTE: the verifier must go on the instance attribute. FastMCP reads
+            # self._token_verifier (normally set in __init__); settings has no
+            # such field, so assigning there would silently do nothing and leave
+            # the server open. Setting auth+verifier after construction also
+            # skips __init__'s "both or neither" validation, so keep them
+            # together here.
+            mcp._token_verifier = mcp_auth.EntraTokenVerifier()
+            mcp.settings.auth = AuthSettings(
+                issuer_url=AnyHttpUrl(
+                    f"https://login.microsoftonline.com/{mcp_auth.TENANT_ID}/v2.0"
+                ),
+                # Setting this makes the SDK serve the RFC 9728 document at
+                # /.well-known/oauth-protected-resource and reference it from the
+                # 401 WWW-Authenticate header — no hand-written endpoint needed.
+                resource_server_url=AnyHttpUrl(public_url) if public_url else None,
+                required_scopes=["claims.access"],
+            )
+            print(f"[auth] Entra OAuth ENABLED (audience {mcp_auth.API_APP_ID})", flush=True)
+        else:
+            print("[auth] OPEN — no ENTRA_TENANT_ID/ENTRA_API_APP_ID set", flush=True)
+
         mcp.run(transport="streamable-http")
     else:
         mcp.run()
