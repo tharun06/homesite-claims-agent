@@ -341,16 +341,35 @@ if __name__ == "__main__":
                 issuer_url=AnyHttpUrl(
                     f"https://login.microsoftonline.com/{mcp_auth.TENANT_ID}/v2.0"
                 ),
-                # Setting this makes the SDK serve the RFC 9728 document at
-                # /.well-known/oauth-protected-resource and reference it from the
-                # 401 WWW-Authenticate header — no hand-written endpoint needed.
                 resource_server_url=AnyHttpUrl(public_url) if public_url else None,
-                required_scopes=["claims.access"],
+                # This list becomes "scopes_supported" and clients hand it to
+                # Entra verbatim. It must be the resource-qualified spelling or
+                # Entra aims at Microsoft Graph and fails with AADSTS650053.
+                required_scopes=[mcp_auth.SCOPE_URI],
             )
             print(f"[auth] Entra OAuth ENABLED (audience {mcp_auth.API_APP_ID})", flush=True)
+            print(f"[auth] scope clients must request: {mcp_auth.SCOPE_URI}", flush=True)
         else:
             print("[auth] OPEN — no ENTRA_TENANT_ID/ENTRA_API_APP_ID set", flush=True)
 
-        mcp.run(transport="streamable-http")
+        # Build the ASGI app ourselves so we can wrap it. mcp.run() would hide it.
+        import uvicorn
+        app = mcp.streamable_http_app()
+
+        if mcp_auth.auth_enabled() and public_url:
+            # Replace the SDK's protected-resource document with one Entra can
+            # actually work with, and answer every path a client probes.
+            docs, resource_uri = mcp_auth.metadata_documents(public_url)
+            app = mcp_auth.EntraMetadata(app, docs)
+            print(f"[auth] advertising resource: {resource_uri}", flush=True)
+            print("[auth]   ^ must also be an identifier URI on the API app", flush=True)
+
+        if os.getenv("MCP_DEBUG_LOG"):
+            # One line per request: did the client reach us, and what token did
+            # it send? This is the only thing that answers "it just fails".
+            app = mcp_auth.RequestLog(app)
+            print("[debug] request logging ON", flush=True)
+
+        uvicorn.run(app, host=mcp.settings.host, port=mcp.settings.port)
     else:
         mcp.run()
