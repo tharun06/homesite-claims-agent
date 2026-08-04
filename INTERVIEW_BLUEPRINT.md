@@ -14,7 +14,68 @@ mean when a model is writing the SQL.
 
 ---
 
-## The 30-second pitch
+## Saying it out loud
+
+### "Tell me about your recent project" — ~75 seconds
+
+Lead with the problem. Plant hooks. Stop early and let them dig.
+
+> So it's an AI copilot for insurance claims adjusters.
+>
+> The problem is pretty simple. An adjuster has maybe forty open claims, and
+> answering something like *"which of mine are about to breach SLA"* means
+> clicking through a dashboard for ten minutes. So we put a chat assistant
+> inside the dashboard that just answers it.
+>
+> Under the hood it's a LangGraph agent with three ways of finding things. Two
+> are vector search — one over past claims, one over policy documents. The
+> third is natural-language-to-SQL, because a question like *"how many
+> fraud-flagged claims are open in the Southeast"* isn't a similarity problem,
+> it's a counting problem. Embeddings can't count. That was probably the most
+> interesting design call.
+>
+> The part I'd want to talk about is safety. The agent writes SQL, so I assumed
+> that eventually it would write something it shouldn't. The database connection
+> is a read-only role — so even if everything above it fails, Postgres just
+> refuses. And anything that modifies a claim stops and waits for human approval
+> before it runs.
+>
+> Then the second half. We published the same tools as an MCP server, so Claude
+> and ChatGPT can use them too. That one's public on the internet, so it sits
+> behind OAuth 2.1 with Entra ID.
+>
+> That's the shape of it — happy to go deeper anywhere.
+
+### The 20-second version
+
+For a screen, a recruiter, or when they've already heard a lot.
+
+> It's an AI copilot for insurance claims adjusters — a chat assistant inside
+> their dashboard that answers questions about their caseload. It's a LangGraph
+> agent with vector search and a natural-language-to-SQL path for aggregate
+> questions. We also published the same tools as an MCP server behind OAuth, so
+> Claude and ChatGPT can use them.
+
+### Delivery notes
+
+- **Lead with the adjuster, not the stack.** Forty claims, ten minutes of
+  clicking. Anyone can picture that. Nobody pictures "LangGraph StateGraph."
+- **Say "adjuster", "SLA", "peril", "SIU".** Domain vocabulary signals you
+  understood the business, not just the ticket.
+- **Pause after "embeddings can't count."** It's the best hook you have. Let it
+  land.
+- **Name-drop at most four technologies.** Listing fifteen is the POC smell —
+  it reads as "I followed a tutorial." Four sounds like you chose them.
+- **Stop before they stop you.** The goal of an opener is a follow-up question,
+  not completeness. Everything else in this document is the follow-up.
+- **End with an offer, not a trail-off.** "Happy to go deeper anywhere" beats
+  "…yeah, so, that's basically it."
+
+**Hooks you're deliberately planting**, each of which you can answer well:
+LangGraph · NL2SQL · embeddings can't count · read-only role · human approval ·
+MCP · OAuth 2.1.
+
+### The written version (for a CV or a follow-up email)
 
 > A claims dashboard with an embedded copilot. The copilot is a LangGraph agent
 > with three retrieval paths — vector search over past claims, vector search
