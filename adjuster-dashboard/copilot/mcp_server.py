@@ -104,10 +104,34 @@ def _embed(text: str) -> list[float]:
     return response.json()["data"][0]["embedding"]
 
 def _search_policies(query: str, k: int =3) -> list[dict]:
-    """Search the policy docs index for relevant clauses, using Azure AI Search + embeddings."""
+    """Hybrid search over the policy docs, then semantic reranking.
+
+    Three stages, and the retrieval mode is decided entirely by which keys are in
+    this payload — Azure infers it, there is no mode switch:
+
+      1. "search"        — BM25 keyword. Catches exact terms an embedding blurs:
+                           document numbers, "SIU", a specific dollar threshold.
+      2. "vectorQueries" — ANN over the chunk embeddings. Catches paraphrase.
+                           Both present => hybrid, fused by Reciprocal Rank
+                           Fusion (RRF scores rank position, not raw score,
+                           because cosine and BM25 are not comparable scales).
+      3. "queryType"     — a cross-encoder reranks the fused list, reading the
+                           query and each chunk TOGETHER rather than comparing
+                           two independently-produced vectors.
+
+    The "search" key is load-bearing for stage 3, not just stage 1. Without a
+    text query Azure never engages the ranker path: it returns 200 and silently
+    ignores queryType, and every hit comes back with rerankerScore null. That
+    was the state of this function until we checked the response instead of
+    trusting the request.
+
+    Requires a semantic configuration named "default" on the index. Without one
+    THIS call 400s — which is the failure we want, loud instead of silent.
+    """
     embedding = _embed(query)
     url = f"{SEARCH_ENDPOINT}/indexes/{SEARCH_INDEX}/docs/search?api-version=2024-07-01"
     payload = {
+        "search": query,
         "vectorQueries": [
             { "kind": "vector", "vector": embedding, "fields": "content_vector", "k": k }
         ],
@@ -132,15 +156,21 @@ def _search_similar_claims(query:str, k:int=5) -> list[dict]:
     embedding = _embed(query)
     filter_str = "search.in(claim_number, '{}', ',')".format(",".join(allowed_numbers))
     url = f"{SEARCH_ENDPOINT}/indexes/{CLAIMS_INDEX}/docs/search?api-version=2024-07-01"
+    # Same hybrid + rerank shape as _search_policies. preFilter still applies to
+    # both legs, so the keyword half cannot reach another adjuster's claims
+    # either — scoping happens before ranking, not after.
     payload = {
+        "search": query,
         "vectorFilterMode": "preFilter",
         "vectorQueries": [
             { "kind": "vector", "vector": embedding, "fields": "content_vector", "k": k }
         ],
+        "queryType": "semantic",
+        "semanticConfiguration": "default",
         "filter": filter_str,
         "top": 5,
         "select": "claim_number,content,estimated_amount,status"
-    }   
+    }
     response = httpx.post(url, headers={"api-key": SEARCH_KEY}, json=payload, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
     return response.json().get("value", [])

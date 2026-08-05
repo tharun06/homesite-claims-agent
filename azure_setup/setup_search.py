@@ -69,6 +69,22 @@ index_def = {
     "vectorSearch": {
         "algorithms": [{"name": "hnsw-algo", "kind": "hnsw"}],
         "profiles":   [{"name": "hnsw-profile", "algorithm": "hnsw-algo"}]
+    },
+    # Semantic reranking. The query side asks for semanticConfiguration "default";
+    # if this block is missing, Azure does NOT reject the request — it returns 200
+    # and silently drops the reranking, and every hit comes back with
+    # rerankerScore null. That is how this index ran for weeks looking configured.
+    # Defined here rather than in the portal so it cannot drift out of the repo.
+    "semantic": {
+        "defaultConfiguration": "default",
+        "configurations": [{
+            "name": "default",
+            "prioritizedFields": {
+                # 'content' is the chunk text — the only field worth reranking on.
+                "prioritizedContentFields": [{"fieldName": "content"}],
+                "prioritizedKeywordsFields": []
+            }
+        }]
     }
 }
 ok(call("put", f"/indexes/{INDEX}", index_def), "Index created")
