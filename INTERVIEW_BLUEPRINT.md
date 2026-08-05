@@ -114,18 +114,20 @@ MCP · OAuth 2.1.
 >
 > At query time it's three stages. BM25 keyword, because embeddings blur exact
 > terms — a document number, a specific dollar threshold. Vector search over the
-> chunk embeddings for paraphrase. Azure fuses those two with reciprocal rank
-> fusion, which scores rank position rather than raw score, since cosine and
-> BM25 aren't comparable scales. Then a cross-encoder reranks the fused list.
+> chunk embeddings for paraphrase, which keyword misses entirely. Azure fuses
+> those two with reciprocal rank fusion — it scores rank position rather than raw
+> score, since cosine and BM25 aren't comparable scales. Then a cross-encoder
+> reranks the fused list.
 >
-> That last stage was actually a bug I found. The payload asked for semantic
-> ranking, but the index had no semantic configuration — and Azure doesn't error
-> on that. It returns 200 and silently skips the reranking, so every result came
-> back with a null reranker score. I only caught it because I checked the
-> response instead of trusting the request. Once I defined the configuration and
-> added the keyword leg, the reranker started reordering — it now promotes our
-> adjuster authority matrix above what fusion ranked first for approval-limit
-> questions, which is the right document.
+> That last stage is the one that earns its keep. The reranker reads the question
+> and the chunk together in one pass, instead of comparing two vectors that were
+> produced independently. On our data it promotes the adjuster authority matrix
+> above what fusion ranked first for approval-limit questions — which is the
+> right document. It's too slow to run over the whole corpus, so it only sees the
+> fused candidates.
+>
+> To be precise about credit: Azure does all four of those natively. What I did
+> was configure the semantic profile on the index and send both legs.
 >
 > The other thing I'd point out is what RAG *doesn't* cover. "How many
 > fraud-flagged claims are open in the Southeast" isn't a similarity question —
@@ -177,8 +179,8 @@ understand retrieval, or did they follow a tutorial."
 
 - *Why 512 and 64?* → signal density vs. keeping a clause intact; overlap stops
   a rule on a boundary being lost by both neighbours.
-- *Hybrid or pure vector?* → hybrid, then reranked. Three stages. And it was
-  silently broken until I checked the response for a reranker score.
+- *Hybrid or pure vector?* → hybrid, then reranked. Three stages: BM25, vector,
+  RRF fusion, cross-encoder. Azure provides all of it; I configured it.
 - *How do you keep it fresh?* → scheduled indexer, incremental change detection
   on blob `LastModified`.
 - *How do you know it works?* → you don't have numbers. Say so, then say what
@@ -343,7 +345,8 @@ are in that JSON body — not by any code structure:
 | both together | hybrid — Azure fuses them with Reciprocal Rank Fusion |
 | all three + `semanticConfiguration` | **hybrid + cross-encoder rerank <- what we send** |
 
-**Measured on the live index, not read off the source:**
+There is no `hybridSearch: true` flag — Azure infers the mode from which keys are
+present. Measured on the live index:
 
 ```
 A) vector only                   score=0.7406   rerankerScore=None
@@ -361,46 +364,63 @@ The score scales are the tell: cosine is 0–1, BM25 is unbounded, RRF is tiny
 (it sums `1/(60+rank)`), and a reranker score would appear separately in
 `@search.rerankerScore` on a 0–4 scale.
 
-### The bug that made it look configured — tell this story
+### Why three stages and not one
 
-For weeks the payload sent `queryType: "semantic"` and
-`semanticConfiguration: "default"` while **no semantic configuration existed on
-the index**. Azure did not reject it. The request returned 200, results came
-back, and `@search.rerankerScore` was `None` on every hit — the parameter was
-silently ignored, because with no `search` text there is no ranker path to
-engage.
+Each stage covers a failure of the one before it.
 
-It was caught by checking the *response* for a reranker score instead of
-trusting the *request*.
+**BM25 alone** misses paraphrase. An adjuster asking "can I sign off on this
+write-off" will not match a document that says "total loss settlement
+authority" — no shared terms.
 
-The fix was two changes, and the second one is the interesting half:
+**Vectors alone** blur exact tokens. Embeddings are good at meaning and bad at
+identifiers: a document number, `SIU`, a specific `$10,000` threshold. Two
+different dollar figures sit almost on top of each other in embedding space.
 
-1. **Define the semantic configuration on the index**, naming `content` as the
-   field to rerank on. Additive, so no reindex and no data loss.
-2. **Add `"search": query` to the payload** — which turns on the keyword leg,
-   making it hybrid *and* giving the reranker something to rank.
+**Hybrid** runs both and fuses with Reciprocal Rank Fusion. RRF scores *rank
+position* rather than raw score — `1/(60+rank)` summed across the two lists —
+because cosine and BM25 are not comparable quantities. A chunk both legs rank
+highly wins; a chunk only one leg found still gets a chance.
 
-The second change also converts the failure from silent to loud: with a `search`
-text and a missing configuration, the same call now returns **HTTP 400 — "This
-index must have valid semantic configurations defined"**. That error should have
-fired from the very beginning.
+**The reranker** then reads the query and each chunk **together** in a single
+pass, instead of comparing two vectors that were produced independently and
+never saw each other. That is why it is more accurate — and why it cannot run
+over the whole corpus. It runs last, over the ~50 fused candidates.
 
-**Proof it is real, on the project's own data.** For *"what is my approval limit
-for a total loss settlement"*:
+**Measured on the project's own data**, for *"what is my approval limit for a
+total loss settlement"*:
 
 ```
 RRF order:      repair-cost-reference     (0.0331)  >  adjuster-authority-matrix (0.0328)
 Reranker order: adjuster-authority-matrix (2.796)   >  repair-cost-reference     (2.564)
 ```
 
-The cross-encoder promoted the authority matrix above the chunk fusion had
-ranked first — and the authority matrix is the correct document for that
-question. That reordering is the reranker earning its cost.
+The cross-encoder promotes the authority matrix above what fusion ranked first —
+and the authority matrix is the correct document for that question. That
+reordering is the reranker earning its cost.
 
-**Why a reranker beats fusion:** RRF only knows rank positions. The cross-encoder
-reads the query and the chunk *together* in a single pass, rather than comparing
-two independently-produced vectors. Far more accurate, far too slow to run over
-a whole corpus — which is exactly why it runs second, over ~50 candidates.
+### Say "configured", not "implemented"
+
+Azure AI Search provides all four pieces — BM25, the HNSW vector index, RRF
+fusion, and the cross-encoder. None of that was written here. What the project
+does is send the right payload and declare the semantic configuration on the
+index.
+
+Word it accordingly:
+
+> ❌ "I implemented hybrid search and reranking."
+> ✅ "Azure AI Search does hybrid and semantic reranking natively. I configured
+>    the semantic profile on the index and send both a keyword and a vector leg,
+>    so it fuses with RRF and then reranks."
+
+The first version invites *"walk me through your fusion algorithm"*, which ends
+badly. The second is accurate and shows you know where the boundary is between
+your code and the service.
+
+**A detail worth having ready:** there is no `hybridSearch: true` flag. Azure
+infers the mode from which keys are present — send `vectorQueries` alone and you
+get pure vector, because that is a legitimate thing to want. The reranker is
+separate again: it is a billable feature (free below 1,000 queries/month), so it
+has to be declared on the index rather than switched on by default.
 
 `_search_similar_claims` adds **`vectorFilterMode: "preFilter"`** — narrow to
 the caller's own claims *before* ranking, so *k* only has to cover the matches
@@ -453,9 +473,8 @@ That answer demonstrates more than the inflated one, and it survives follow-ups.
   keyword-only, no vector query. The live path is `_search_policies` in
   `mcp_server.py`. Don't let a reviewer find the old file and conclude the
   vectors are unused.
-- The semantic configuration is now defined in `setup_search.py`, not only on
-  the live index — it was missing entirely before, and Azure's silent-ignore
-  behaviour meant nothing ever surfaced it. Exactly the drift IaC catches.
+- The semantic configuration is defined in `setup_search.py`, so the index can
+  be rebuilt from the repo rather than depending on portal state.
 
 ## A3. NL2SQL as a subgraph-as-a-tool
 
@@ -912,12 +931,18 @@ Spoken answers, not written ones. Two or three sentences, then stop.
 > for finding the relevant set.
 
 **Vector search alone, or hybrid?**
-> Hybrid plus reranking — three stages. BM25, vector, fused with RRF, then a
-> cross-encoder reranks the fused list. Though the honest version of that answer
-> is that it was broken for weeks. The payload asked for semantic ranking but the
-> index had no semantic configuration, and Azure doesn't error on that — it
-> returns 200 and silently drops the rerank. I found it by checking the response
-> for a reranker score rather than trusting the request, which is a habit I kept.
+> Hybrid, then reranked. BM25 for exact terms embeddings blur — document numbers,
+> dollar thresholds — vector search for paraphrase, fused with reciprocal rank
+> fusion, then a cross-encoder reranks the fused list. Azure AI Search provides
+> all of that natively; what I did was declare the semantic configuration on the
+> index and send both legs in the query.
+
+**Why bother with the reranker if you already have fusion?**
+> Fusion only knows rank positions — it never re-examines the text. The
+> cross-encoder reads the question and the chunk together in a single pass,
+> rather than comparing two vectors that were embedded separately and never saw
+> each other. It's much more accurate and much slower, so it runs last over about
+> fifty candidates instead of the whole corpus.
 
 **How do you evaluate retrieval quality?**
 > I don't, formally, and that's the biggest gap in the project. I have no golden

@@ -119,14 +119,15 @@ def _search_policies(query: str, k: int =3) -> list[dict]:
                            query and each chunk TOGETHER rather than comparing
                            two independently-produced vectors.
 
-    The "search" key is load-bearing for stage 3, not just stage 1. Without a
-    text query Azure never engages the ranker path: it returns 200 and silently
-    ignores queryType, and every hit comes back with rerankerScore null. That
-    was the state of this function until we checked the response instead of
-    trusting the request.
+    Keep "search" even if the keyword leg ever looks redundant: it is load-
+    bearing for stage 3, not just stage 1. Drop it and Azure never engages the
+    ranker path — the call still returns 200, but queryType is ignored and every
+    hit comes back with rerankerScore null. Assert on rerankerScore, not on the
+    request, if you need to confirm reranking is live.
 
-    Requires a semantic configuration named "default" on the index. Without one
-    THIS call 400s — which is the failure we want, loud instead of silent.
+    Requires a semantic configuration named "default" on the index (defined in
+    azure_setup/setup_search.py). Without one THIS call 400s, which is the
+    failure we want — loud rather than silent.
     """
     embedding = _embed(query)
     url = f"{SEARCH_ENDPOINT}/indexes/{SEARCH_INDEX}/docs/search?api-version=2024-07-01"
