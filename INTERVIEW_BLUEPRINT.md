@@ -89,6 +89,92 @@ MCP · OAuth 2.1.
 
 ---
 
+## "Explain your RAG architecture" — the most-asked question
+
+### The spoken answer, ~90 seconds
+
+> Sure. There are two halves — how documents get in, and what happens at query
+> time.
+>
+> Documents live in Azure Blob Storage. Azure AI Search has an indexer pointed at
+> that container, and the indexer runs what Azure calls a *skillset* — two
+> skills. The first splits each document into 512-token chunks with 64 tokens of
+> overlap. The second embeds each chunk with `text-embedding-3-small`. Then index
+> projections fan those chunks out, so **one chunk becomes one document in the
+> index** — rather than one file becoming one document.
+>
+> That last bit matters more than it sounds. If you index per file, the
+> retrievable unit is a whole policy document, and retrieval hands the model
+> forty pages. You want the chunk to be the unit.
+>
+> Worth saying — no chunking or embedding code runs in my application. It's all
+> inside the indexer. Which also handles freshness: blob indexers do incremental
+> change detection, so on a schedule only the files that actually changed get
+> re-cracked and re-embedded.
+>
+> At query time I embed the question, run a vector query against the chunk
+> vectors, and then Azure's semantic reranker reorders the top hits with a
+> cross-encoder. So two stages — **vectors for recall, reranker for precision.**
+>
+> The other thing I'd point out is what RAG *doesn't* cover. "How many
+> fraud-flagged claims are open in the Southeast" isn't a similarity question —
+> embeddings can't count. That routes to a natural-language-to-SQL path instead.
+> Knowing which questions aren't RAG questions was probably the most important
+> design call in the project.
+>
+> The honest gap is evaluation. I have no golden question set and no recall@k —
+> I tuned by reading outputs, which doesn't scale.
+
+### The structure underneath it
+
+Memorise the spine, not the words. Four beats:
+
+1. **Ingest** — where documents live → how they reach the index
+2. **Retrieve** — what happens when a question arrives
+3. **The boundary** — what RAG is *not* for, and where those questions go
+4. **The gap** — evaluation
+
+Beats 3 and 4 are what separate you. Almost everyone can describe chunk-embed-
+retrieve. Far fewer volunteer where the approach stops working.
+
+### If they hand you a marker
+
+Draw exactly this, left to right, and talk over it:
+
+```
+  Blob          Indexer          Skillset              Index
+ ┌──────┐      ┌────────┐      ┌───────────┐      ┌─────────────┐
+ │ docs │ ───► │ crack  │ ───► │ split 512 │ ───► │ chunk       │
+ └──────┘      │ +meta  │      │ overlap64 │      │ vector 1536 │
+               └────────┘      │ embed     │      │ HNSW        │
+                               └───────────┘      └─────────────┘
+                                                         ▲
+   question ──► embed ──► vector query ──► semantic rerank
+```
+
+Then add the second arrow — the one that *doesn't* go through the index:
+
+```
+   "how many …?" ──► NL2SQL subgraph ──► Postgres (read-only role)
+```
+
+Drawing the second path unprompted is the whole answer to "does this person
+understand retrieval, or did they follow a tutorial."
+
+### Follow-ups that always come next
+
+- *Why 512 and 64?* → signal density vs. keeping a clause intact; overlap stops
+  a rule on a boundary being lost by both neighbours.
+- *Hybrid or pure vector?* → vector + semantic reranker. Two stages.
+- *How do you keep it fresh?* → scheduled indexer, incremental change detection
+  on blob `LastModified`.
+- *How do you know it works?* → you don't have numbers. Say so, then say what
+  you'd build.
+- *How big is the corpus?* → ten documents, it's a demo. Then pivot to what
+  changes at 10k: deletion handling and embedding quota.
+
+---
+
 ## System map
 
 ```
@@ -173,6 +259,130 @@ The fix is **filter first, then rank**: narrow by structured predicates
 (region, status, peril, date window) and run the vector search over that
 candidate set. This is standard practice — the vector index is for ranking
 within a relevant set, not for finding the relevant set.
+
+## A2b. The document pipeline — how policy docs get indexed
+
+This is the ingestion half of RAG, and it's the part interviewers probe when
+they want to know whether you've run a corpus or just called an embedding API.
+
+### Where the documents live
+
+Azure **Blob Storage**, container `policy-documents`. Blob is the source of
+truth; the search index is derived and disposable. That separation matters —
+you can rebuild the index from scratch at any time, and you never lose the
+originals to an indexing bug.
+
+### The pipeline — Azure AI Search *integrated vectorization*
+
+The important architectural point: **no chunking or embedding code runs in the
+application.** Azure AI Search does it inside the indexer.
+
+```
+Blob container (policy-documents)
+        │
+        ▼
+  Data source  ── "azureblob", points at the container
+        │
+        ▼
+  Indexer  ── cracks each document, extracts contentAndMetadata
+        │
+        ▼
+  Skillset ── SKILL 1: SplitSkill      → 512-token pages, 64-token overlap
+        │     SKILL 2: AzureOpenAIEmbeddingSkill
+        │                              → text-embedding-3-small, 1536 dims
+        ▼
+  indexProjections ── one index document per CHUNK, not per file
+        │              (projectionMode: skipIndexingParentDocuments)
+        ▼
+  policy-index ── chunk_id (key) · content · content_vector (HNSW)
+                  metadata_storage_name · metadata_storage_path
+```
+
+**"What skills did you use"** — in Azure AI Search, *skill* is a specific term:
+a step in the enrichment pipeline. Two:
+
+1. **`Microsoft.Skills.Text.SplitSkill`** — `textSplitMode: pages`,
+   `maximumPageLength: 512`, `pageOverlapLength: 64`.
+2. **`Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill`** — context
+   `/document/chunks/*`, so it runs **per chunk**, not per document.
+
+**Why 512 with 64 overlap:** small enough that a retrieved chunk is mostly
+signal rather than surrounding boilerplate, large enough to keep a clause
+intact. The overlap stops a rule that straddles a boundary from being lost by
+both neighbours.
+
+**`indexProjections` is the piece people miss.** Without it you get one index
+document per file, with the vector of… what, exactly? The whole file? Then
+retrieval returns a 40-page PDF and you've gained nothing. Projections fan the
+chunks out so the retrievable unit is the chunk, and
+`skipIndexingParentDocuments` stops the parent being indexed alongside them.
+
+### The query side
+
+`_search_policies` does a **vector query plus semantic reranking**:
+
+- embed the user's question
+- `vectorQueries` against `content_vector`, top *k*
+- `queryType: "semantic"` — Azure's L2 reranker reorders the vector hits using
+  a cross-encoder
+
+That's a two-stage retrieval: **vector for recall, semantic reranker for
+precision**. Worth naming explicitly — "we rerank" is a strong signal.
+
+`_search_similar_claims` adds **`vectorFilterMode: "preFilter"`** — narrow to
+the caller's own claims *before* ranking, so *k* only has to cover the matches
+you want, instead of being padded to survive competition from every other
+adjuster's claims. That's the top-k fix from A2, implemented in the engine
+rather than in application code.
+
+### Freshness
+
+The indexer runs on a schedule (`interval: PT2H`) and Azure blob indexers do
+**incremental change detection** via blob `LastModified` — only new and changed
+blobs are re-cracked, re-chunked and re-embedded. Unchanged files cost nothing.
+
+`seed_policy_docs.py` mirrors `data/policies/` to blob, deletes blobs that no
+longer exist locally, and reruns the indexer — so the index reflects exactly the
+local document set.
+
+### Scale — answer this one carefully
+
+**The demo corpus is 10 policy documents.** Say that if asked. What makes the
+answer strong is that the *architecture* is the one you'd run at 10,000, and you
+can explain exactly what changes:
+
+| at 10k docs, daily churn | what handles it |
+| --- | --- |
+| re-embedding everything daily is unaffordable | incremental change detection — only changed blobs reprocess |
+| indexer run time | indexers batch and can run in parallel; large corpora need a schedule + batch size tuning |
+| deletions | blob soft-delete detection policy, or a delete marker — **otherwise deleted docs stay searchable forever** |
+| embedding throughput | the embedding skill hits Azure OpenAI quota; needs a rate limit and retry, and PTU if sustained |
+| cost | embedding is per-token on ingest; storage is per-vector. HNSW is memory-resident, so vector count drives tier |
+| index tier | the free tier caps storage and index count — 10k docs of chunks needs Basic or Standard |
+
+**Do not claim a corpus you don't have.** "Over 10,000 PDFs updated daily"
+invites exactly the follow-ups above — indexer runtime, embedding spend,
+deletion handling, quota throttling — and a wrong number there costs you more
+than the bigger figure ever earns. The honest version is stronger anyway:
+
+> "The demo corpus is ten policy documents, but the pipeline is integrated
+> vectorization against blob, so it's the same design at ten thousand — the
+> indexer does incremental change detection, and the embedding happens inside
+> the skillset rather than in my code. What would actually change at that scale
+> is deletion handling and embedding quota, and I'd want a soft-delete policy
+> before going near production."
+
+That answer demonstrates more than the inflated one, and it survives follow-ups.
+
+### Two loose ends, if someone reads the repo
+
+- `clients/search_client.py` is **legacy** — from the original claims agent,
+  keyword-only, no vector query. The live path is `_search_policies` in
+  `mcp_server.py`. Don't let a reviewer find the old file and conclude the
+  vectors are unused.
+- The query passes `semanticConfiguration: "default"` but no setup script
+  creates one — it was added in the portal. That's exactly the kind of thing
+  IaC would have caught.
 
 ## A3. NL2SQL as a subgraph-as-a-tool
 
@@ -557,63 +767,226 @@ is not.*
 
 ---
 
-# Part E — Questions you should expect
+# Part E — Questions you should expect, answered
 
-**On the agent**
-- Why LangGraph and not a plain loop, or LangChain agents? → checkpointer +
-  interrupt; both load-bearing.
-- What's actually stored in the checkpointer, and when? → full graph state,
-  after every node transition, keyed by `thread_id`.
-- How do you resume? → `ainvoke(None, config)`; `None` means continue from saved
-  state.
-- What happens on a container restart mid-conversation? → state is in Postgres,
-  next message resumes.
+Spoken answers, not written ones. Two or three sentences, then stop.
 
-**On RAG**
-- Why not just embed everything? → aggregates aren't a similarity problem;
-  embeddings can't count.
-- How do you stop top-k returning irrelevant results? → filter to a candidate
-  set first, rank within it.
-- How do you evaluate retrieval quality? → *honest answer: no formal eval
-  harness. Name it as the gap and say what you'd build.*
+## On the agent
 
-**On NL2SQL**
-- What if the model writes `DROP TABLE`? → three layers, and layer 2 is the
-  database itself.
-- What if it writes valid SQL for the wrong rows? → row scoping via TEMP VIEWs,
-  mirroring the API's rule.
-- What about SQL that's syntactically valid but semantically wrong? → value
-  grounding, plus the retry loop on execution error. Not fully solved — an eval
-  set is the real answer.
+**Why LangGraph and not a plain while-loop, or LangChain agents?**
+> Two features, and I'd have had to build both by hand otherwise. The
+> checkpointer — graph state persists to Postgres after every node, so a
+> conversation survives a container restart. And `interrupt_before`, which lets
+> me stop the graph *between* deciding to call a tool and actually calling it.
+> That's where the human approval gate lives. If I didn't need those, a while
+> loop would have been honest enough.
 
-**On MCP and OAuth**
-- You exposed tools publicly — how did you secure them? → resource server,
-  OAuth 2.1, per-request JWT validation, **audience-scoped**; then immediately
-  raise the tool-surface split, because auth alone isn't the answer.
-- Why validate offline instead of introspecting? → no round trip per request;
-  JWKS cached with rotation handling.
-- What stops a token for another API in the tenant? → the audience check —
-  and here's the test that proves it.
-- Would you give an external LLM write access? → no. The approval gate lives in
-  the copilot's graph and an external client bypasses it. Writes stay internal.
-- What about PII? → currently a real gap; redaction layer before exposure.
+**What's actually stored in the checkpointer, and when?**
+> The whole graph state, serialised after every node transition, keyed by
+> `thread_id`. Not just the messages — every channel in the state. Per-node
+> rather than per-turn is what makes resume-from-interrupt possible; you can
+> stop between the agent node and the tool node and pick up exactly there.
 
-**On infrastructure**
-- Why Container Apps over App Service / Functions / AKS? → quota, scale-to-zero
-  economics, and Functions' 230s cap versus a streaming transport.
-- How does a code change reach production? → Actions builds SHA-tagged images to
-  ghcr.io, deploy is explicit. Name the automation gap.
-- How do you control cost? → no standing charges, scale to zero, capped
-  replicas, free registry; $0 to date.
+**How do you resume?**
+> `ainvoke(None, config)`. The `None` is the interesting part — it means "no new
+> input, continue from saved state." LangGraph loads the checkpoint for that
+> `thread_id` and carries on from where it stopped.
 
-**The ones that separate candidates**
-- What's still broken? → tool-surface split, PII redaction, no retrieval eval,
-  no auto-rollout, the N+1, the identifier-URI wall.
-- What would you do differently? → IaC from day one; the manual Azure setup is
-  not reproducible.
-- What did you skip on purpose? → Graph API, Bot Service, API Management
-  (~$50–210/mo floor), VNet/private endpoints — actively wrong here, since
-  connectors require public reachability.
+**What happens if the container restarts mid-conversation?**
+> Nothing visible. State is in Postgres, not memory. That's not theoretical —
+> the containers scale to zero when idle, so they *do* die between messages.
+> In-process state was never an option.
+
+**How are conversations isolated from each other?**
+> `thread_id` is the key and the boundary. It's derived server-side from the
+> authenticated caller, not accepted from the client — which was one of the bugs
+> I found: `/approve` originally trusted a client-supplied `thread_id`, so you
+> could approve someone else's pending write.
+
+## On RAG and the document pipeline
+
+**Walk me through your ingestion pipeline.**
+> Documents live in Azure Blob. Azure AI Search has an indexer pointed at that
+> container, and the indexer runs a skillset — a SplitSkill that chunks to 512
+> tokens with 64 overlap, then an AzureOpenAI embedding skill running per chunk.
+> Index projections fan the chunks out so the retrievable unit is a chunk, not a
+> file. No chunking or embedding code runs in my application at all.
+
+**Why 512 tokens with 64 overlap?**
+> Small enough that a retrieved chunk is mostly signal instead of surrounding
+> boilerplate, big enough to keep a clause intact. The overlap is so a rule that
+> straddles a boundary isn't lost by both neighbours.
+
+**How big is the corpus, and how does it stay fresh?**
+> The demo corpus is ten policy documents — it's a demo. The pipeline is the one
+> you'd run at ten thousand: blob indexers do incremental change detection on
+> `LastModified`, so only changed files get re-cracked and re-embedded, on a
+> schedule. What would actually bite at that scale is deletion handling — a
+> deleted blob stays searchable unless you configure a soft-delete policy — and
+> embedding quota on the ingest side.
+
+**Why not just embed everything and skip SQL?**
+> Because embeddings can't count. "How many fraud-flagged claims are open in the
+> Southeast" isn't a similarity question — a vector index gives you the *k*
+> nearest neighbours, it has no concept of "all rows matching X." Aggregates are
+> a SQL problem wearing a natural-language costume.
+
+**How do you stop top-k returning irrelevant results?**
+> Filter first, rank second. For similar-claims I use `vectorFilterMode:
+> preFilter`, which narrows to the caller's own claims *before* ranking. Without
+> that, `k=3` gives you the three globally nearest claims, which may all be
+> another adjuster's. The vector index is for ranking within a relevant set, not
+> for finding the relevant set.
+
+**Vector search alone, or hybrid?**
+> Vector retrieval with Azure's semantic reranker on top — `queryType: semantic`.
+> So two stages: vectors for recall, a cross-encoder reranker for precision.
+
+**How do you evaluate retrieval quality?**
+> I don't, formally, and that's the biggest gap in the project. I have no golden
+> question set and no recall@k numbers — I tuned by reading outputs, which
+> doesn't scale and isn't defensible. What I'd build is a labelled set of maybe
+> a hundred adjuster questions with known-correct source documents, then measure
+> recall@k on retrieval separately from answer quality, so I can tell a
+> retrieval failure apart from a generation failure.
+
+*(Don't bluff this one. Naming it clearly reads better than a vague answer.)*
+
+## On NL2SQL
+
+**What if the model writes `DROP TABLE`?**
+> Three layers. The generated statement is inspected and rejected unless it's a
+> single SELECT — that blocks DDL, DML and multi-statement. Then the connection
+> itself is a Postgres role granted only SELECT and TEMPORARY, so if my parser
+> is wrong, the database refuses. I didn't try to make the model safe; I made
+> the blast radius small enough that it doesn't need to be.
+
+**Why not just prompt it not to?**
+> A prompt is a request, not a control. Anything that reaches the model — a
+> retrieved policy document, a claim note a customer wrote — is untrusted input
+> that can carry instructions. The enforcement has to be somewhere the model
+> can't reach.
+
+**What if it writes valid SQL for the wrong rows?**
+> The query never touches base tables. It runs against TEMP VIEWs that already
+> have the caller's authorization predicate baked in — same rule as the REST
+> API's `scope_claims()`, deliberately mirrored so the same question gets the
+> same rows either way. An adjuster can write a perfectly correct query for
+> another region and get nothing.
+
+**What about SQL that's syntactically valid but semantically wrong?**
+> That's the hard one and it isn't fully solved. Two mitigations: value grounding
+> before generation, so "Southeast" is mapped to the real column value rather
+> than guessed; and a bounded retry that feeds the database error back for
+> regeneration. But a query that runs and returns the wrong answer is silent,
+> and the only real fix is an eval set. Same gap as retrieval.
+
+**Why a subgraph rather than a function?**
+> It gets its own state, its own retry loop, and node-level tracing, without any
+> of that leaking into the orchestrator's state. The orchestrator sees one tool
+> called `query_claims_data` and has no idea there's a five-node graph behind it.
+
+## On MCP and OAuth
+
+**You exposed tools publicly — how did you secure them?**
+> It's an OAuth 2.1 resource server. It never logs anyone in and never issues a
+> token; it validates tokens Entra issued, per request — signature against the
+> JWKS, issuer, expiry, and audience. But authentication only answers *who*.
+> It doesn't answer *what they're allowed to do*, and that part isn't finished —
+> the three write tools shouldn't be on the public surface at all.
+
+**Why offline validation instead of token introspection?**
+> No network round trip per request. The signing keys are cached with a TTL, and
+> an unknown `kid` forces a refetch, so key rotation self-heals without a
+> deploy.
+
+**What stops someone using a token for a different API in your tenant?**
+> The audience check, and I can show you the test. A real Entra token from my own
+> tenant, correctly signed and unexpired, minted for Microsoft Graph — gets a
+> 401. That's the difference between validating a signature and validating that
+> the token was meant for you.
+
+**Would you give an external LLM write access?**
+> No, and this is the thing I'd change first. The human approval gate lives
+> inside the copilot's LangGraph. Claude calls the MCP server directly, so a
+> write from Claude bypasses the gate entirely. The control isn't in the wrong
+> place for the copilot — it's just not reachable from the other entry point.
+> Writes should be internal-only.
+
+**What about PII?**
+> Real gap. `claim_summary` returns customer name, phone, email, VIN and policy
+> number, and every one of those would land on a third-party provider's servers.
+> A redaction layer belongs between the tool and the public surface, and until
+> it exists that tool shouldn't be exposed.
+
+**What was hardest about the OAuth work?**
+> That the failures happen before your server is involved, so there's nothing to
+> debug. The worst one: if you register the scope by its bare name instead of
+> the `api://` form, Entra can't tell which API you mean, defaults to Microsoft
+> Graph, and sign-in dies with an error code — my server never receives a
+> request. I ended up building a standalone hello-world and a raw-ASGI request
+> logger just to tell "the client never reached me" apart from "the client
+> reached me and I rejected it."
+
+**Is it live?**
+> Token-based, yes — you can call it right now with a valid token. The browser
+> sign-in from a Claude connector isn't, and the reason is specific: Entra only
+> accepts a resource indicator that's a registered Application ID URI, and it
+> won't register a domain you can't prove you own. Mine is on
+> `azurecontainerapps.io`, which is Microsoft's. Production would use a company
+> domain, which you'd want anyway.
+
+## On infrastructure
+
+**Why Container Apps over App Service, Functions, or AKS?**
+> App Service was out — the subscription had a 0 vCPU quota. Functions I
+> rejected on the 230-second execution cap, which doesn't fit a streaming
+> transport. AKS is a cluster I'd have to operate for three containers. Container
+> Apps scales to zero and has an always-free monthly grant, which is why the bill
+> is zero.
+
+**How does a code change reach production?**
+> GitHub Actions builds on push and pushes SHA-tagged images to ghcr.io. Deploy
+> is an explicit `az containerapp update` to that tag. The gap is there's no
+> automatic rollout — I tag by SHA rather than chasing `:latest`, which I'd
+> defend, but the missing piece is OIDC federation from Actions to Azure so the
+> deploy step doesn't need a stored credential.
+
+**Why ghcr.io and not Azure Container Registry?**
+> ACR Basic is about five dollars a month standing, whether you push or not. On
+> a ten-dollar total budget that single line item would have been most of it.
+> ghcr.io is free for public images.
+
+**How do you control cost?**
+> No resources with standing charges, scale to zero, capped max-replicas as a
+> blast-radius limit so a runaway loop can't scale into a bill, free registry.
+> And checking the portal rather than trusting a script's exit code — that's how
+> I caught a second billable Postgres server mid-provision and deleted it.
+
+## The ones that separate candidates
+
+**What's still broken?**
+> The tool-surface split and PII redaction — biggest one. No retrieval eval. No
+> automatic rollout. A known N+1 in claim summary, 174 queries and about seven
+> seconds; I tried a preload, it didn't work, I reverted it rather than leave
+> something half-done. And the identifier-URI wall on the OAuth browser flow.
+
+**What would you do differently?**
+> Infrastructure as code from day one. Everything in Azure was clicked or typed
+> by hand, which means it isn't reproducible and I can't diff it. I found a
+> semantic search configuration referenced in code that no setup script creates —
+> somebody added it in the portal. That's exactly the class of drift IaC catches.
+
+**What did you skip on purpose?**
+> Microsoft Graph — it's users and mail, irrelevant to claims. Bot Service —
+> different stack from LLM connectors. API Management — fifty dollars a month
+> floor for a gateway I don't need yet. And VNet with private endpoints, which
+> would be actively wrong here: connectors need public reachability, so locking
+> it down would break the feature.
+
+**What's the thing you're most pleased with?**
+> That the database enforces read-only rather than the prompt. It's the one
+> control that keeps working when everything above it is wrong.
 
 ---
 
