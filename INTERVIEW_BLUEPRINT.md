@@ -112,13 +112,20 @@ MCP · OAuth 2.1.
 > change detection, so on a schedule only the files that actually changed get
 > re-cracked and re-embedded.
 >
-> At query time I embed the question and run a vector query against the chunk
-> vectors — pure vector, top-k. I should be explicit: there's a `queryType:
-> semantic` in that payload that does nothing. The index has no semantic
-> configuration, so Azure ignores it silently and returns 200 with no reranker
-> score. I caught it by checking the response for a reranker score rather than
-> trusting the request. Making it real is two changes — define the semantic
-> configuration, and add the keyword leg so there's something for RRF to fuse.
+> At query time it's three stages. BM25 keyword, because embeddings blur exact
+> terms — a document number, a specific dollar threshold. Vector search over the
+> chunk embeddings for paraphrase. Azure fuses those two with reciprocal rank
+> fusion, which scores rank position rather than raw score, since cosine and
+> BM25 aren't comparable scales. Then a cross-encoder reranks the fused list.
+>
+> That last stage was actually a bug I found. The payload asked for semantic
+> ranking, but the index had no semantic configuration — and Azure doesn't error
+> on that. It returns 200 and silently skips the reranking, so every result came
+> back with a null reranker score. I only caught it because I checked the
+> response instead of trusting the request. Once I defined the configuration and
+> added the keyword leg, the reranker started reordering — it now promotes our
+> adjuster authority matrix above what fusion ranked first for approval-limit
+> questions, which is the right document.
 >
 > The other thing I'd point out is what RAG *doesn't* cover. "How many
 > fraud-flagged claims are open in the Southeast" isn't a similarity question —
@@ -153,7 +160,8 @@ Draw exactly this, left to right, and talk over it:
                └────────┘      │ embed     │      │ HNSW        │
                                └───────────┘      └─────────────┘
                                                          ▲
-   question ──► embed ──► vector query (top-k, no rerank today)
+   question ──┬─► BM25 keyword ───┐
+              └─► embed ──► ANN ─┴─► RRF fuse ──► cross-encoder rerank
 ```
 
 Then add the second arrow — the one that *doesn't* go through the index:
@@ -169,8 +177,8 @@ understand retrieval, or did they follow a tutorial."
 
 - *Why 512 and 64?* → signal density vs. keeping a clause intact; overlap stops
   a rule on a boundary being lost by both neighbours.
-- *Hybrid or pure vector?* → pure vector today. The semantic parameter in the
-  payload is a no-op — no config on the index, silently ignored. Say so.
+- *Hybrid or pure vector?* → hybrid, then reranked. Three stages. And it was
+  silently broken until I checked the response for a reranker score.
 - *How do you keep it fresh?* → scheduled indexer, incremental change detection
   on blob `LastModified`.
 - *How do you know it works?* → you don't have numbers. Say so, then say what
@@ -331,50 +339,68 @@ are in that JSON body — not by any code structure:
 | fields in the payload | mode you get |
 | --- | --- |
 | `search` only | BM25 keyword |
-| `vectorQueries` only | **pure vector (this is what we send)** |
+| `vectorQueries` only | pure vector |
 | both together | hybrid — Azure fuses them with Reciprocal Rank Fusion |
-| `queryType: "semantic"` + `semanticConfiguration` | adds the L2 cross-encoder rerank |
+| all three + `semanticConfiguration` | **hybrid + cross-encoder rerank <- what we send** |
 
-**Verified against the live index, not read off the source:**
+**Measured on the live index, not read off the source:**
 
 ```
-A) vector only  (current code)   score=0.7406  rerankerScore=None
+A) vector only                   score=0.7406   rerankerScore=None
 B) keyword only (BM25)           score=10.5328
 C) hybrid (search + vector, RRF) score=0.0331
-D) hybrid + semantic             HTTP 400 — "must have valid semantic
-                                 configurations defined"
+D) hybrid + semantic rerank      score=0.0328   rerankerScore=2.796   <- current
 ```
+
+Four different scales, which is why the numbers look unrelated. Cosine is 0-1.
+BM25 is unbounded. RRF is tiny by construction — it scores *rank position*,
+summing `1/(60+rank)`, because cosine and BM25 are not comparable. The reranker
+reports separately in `@search.rerankerScore`, on a 0-4 scale.
 
 The score scales are the tell: cosine is 0–1, BM25 is unbounded, RRF is tiny
 (it sums `1/(60+rank)`), and a reranker score would appear separately in
 `@search.rerankerScore` on a 0–4 scale.
 
-### ⚠️ The reranker is not running
+### The bug that made it look configured — tell this story
 
-The payload sets `queryType: "semantic"` and `semanticConfiguration: "default"`,
-but **no semantic configuration exists on `policy-index`** — the index's
-`semantic` block is empty, and no setup script creates one.
+For weeks the payload sent `queryType: "semantic"` and
+`semanticConfiguration: "default"` while **no semantic configuration existed on
+the index**. Azure did not reject it. The request returned 200, results came
+back, and `@search.rerankerScore` was `None` on every hit — the parameter was
+silently ignored, because with no `search` text there is no ranker path to
+engage.
 
-Azure does **not** error. The request returns 200 and `@search.rerankerScore` is
-`None` on every hit. The parameter is silently ignored, because without a
-`search` text there's no ranker path to engage. Add the keyword leg and the same
-call fails with a 400.
+It was caught by checking the *response* for a reranker score instead of
+trusting the *request*.
 
-So the accurate description of the current system is **pure vector retrieval,
-top-k, no rerank, not hybrid**.
+The fix was two changes, and the second one is the interesting half:
 
-**Do not claim reranking or hybrid search.** It's a two-minute check for anyone
-who looks. What you *can* say, which is better:
+1. **Define the semantic configuration on the index**, naming `content` as the
+   field to rerank on. Additive, so no reindex and no data loss.
+2. **Add `"search": query` to the payload** — which turns on the keyword leg,
+   making it hybrid *and* giving the reranker something to rank.
 
-> "Right now it's pure vector — top-k over chunk embeddings. There's a
-> `queryType: semantic` in the payload that does nothing, because the index has
-> no semantic configuration and Azure ignores it silently rather than erroring.
-> I found that by checking for `rerankerScore` in the response instead of
-> trusting the request. Making it real is two changes: define the semantic
-> configuration on the index, and add the `search` text so there's a keyword leg
-> for RRF to fuse."
+The second change also converts the failure from silent to loud: with a `search`
+text and a missing configuration, the same call now returns **HTTP 400 — "This
+index must have valid semantic configurations defined"**. That error should have
+fired from the very beginning.
 
-That answer is worth more than the feature would have been.
+**Proof it is real, on the project's own data.** For *"what is my approval limit
+for a total loss settlement"*:
+
+```
+RRF order:      repair-cost-reference     (0.0331)  >  adjuster-authority-matrix (0.0328)
+Reranker order: adjuster-authority-matrix (2.796)   >  repair-cost-reference     (2.564)
+```
+
+The cross-encoder promoted the authority matrix above the chunk fusion had
+ranked first — and the authority matrix is the correct document for that
+question. That reordering is the reranker earning its cost.
+
+**Why a reranker beats fusion:** RRF only knows rank positions. The cross-encoder
+reads the query and the chunk *together* in a single pass, rather than comparing
+two independently-produced vectors. Far more accurate, far too slow to run over
+a whole corpus — which is exactly why it runs second, over ~50 candidates.
 
 `_search_similar_claims` adds **`vectorFilterMode: "preFilter"`** — narrow to
 the caller's own claims *before* ranking, so *k* only has to cover the matches
@@ -427,10 +453,9 @@ That answer demonstrates more than the inflated one, and it survives follow-ups.
   keyword-only, no vector query. The live path is `_search_policies` in
   `mcp_server.py`. Don't let a reviewer find the old file and conclude the
   vectors are unused.
-- The query passes `semanticConfiguration: "default"` and **no such
-  configuration exists** — not in a setup script and not on the index. Azure
-  ignores it rather than erroring, so the call has looked healthy the whole
-  time. Exactly the kind of drift IaC would have caught.
+- The semantic configuration is now defined in `setup_search.py`, not only on
+  the live index — it was missing entirely before, and Azure's silent-ignore
+  behaviour meant nothing ever surfaced it. Exactly the drift IaC catches.
 
 ## A3. NL2SQL as a subgraph-as-a-tool
 
@@ -887,13 +912,12 @@ Spoken answers, not written ones. Two or three sentences, then stop.
 > for finding the relevant set.
 
 **Vector search alone, or hybrid?**
-> Pure vector today, and there's a real bug behind that. The payload asks for
-> `queryType: semantic`, but the index has no semantic configuration — so Azure
-> ignores the parameter, returns 200, and no reranking happens. It looks
-> configured and isn't. I found it by checking the response for a reranker score
-> instead of trusting the request. Two changes make it genuine: define the
-> semantic configuration on the index, and add the `search` text so there's a
-> keyword leg for reciprocal rank fusion.
+> Hybrid plus reranking — three stages. BM25, vector, fused with RRF, then a
+> cross-encoder reranks the fused list. Though the honest version of that answer
+> is that it was broken for weeks. The payload asked for semantic ranking but the
+> index had no semantic configuration, and Azure doesn't error on that — it
+> returns 200 and silently drops the rerank. I found it by checking the response
+> for a reranker score rather than trusting the request, which is a habit I kept.
 
 **How do you evaluate retrieval quality?**
 > I don't, formally, and that's the biggest gap in the project. I have no golden
