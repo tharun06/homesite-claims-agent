@@ -112,9 +112,13 @@ MCP · OAuth 2.1.
 > change detection, so on a schedule only the files that actually changed get
 > re-cracked and re-embedded.
 >
-> At query time I embed the question, run a vector query against the chunk
-> vectors, and then Azure's semantic reranker reorders the top hits with a
-> cross-encoder. So two stages — **vectors for recall, reranker for precision.**
+> At query time I embed the question and run a vector query against the chunk
+> vectors — pure vector, top-k. I should be explicit: there's a `queryType:
+> semantic` in that payload that does nothing. The index has no semantic
+> configuration, so Azure ignores it silently and returns 200 with no reranker
+> score. I caught it by checking the response for a reranker score rather than
+> trusting the request. Making it real is two changes — define the semantic
+> configuration, and add the keyword leg so there's something for RRF to fuse.
 >
 > The other thing I'd point out is what RAG *doesn't* cover. "How many
 > fraud-flagged claims are open in the Southeast" isn't a similarity question —
@@ -149,7 +153,7 @@ Draw exactly this, left to right, and talk over it:
                └────────┘      │ embed     │      │ HNSW        │
                                └───────────┘      └─────────────┘
                                                          ▲
-   question ──► embed ──► vector query ──► semantic rerank
+   question ──► embed ──► vector query (top-k, no rerank today)
 ```
 
 Then add the second arrow — the one that *doesn't* go through the index:
@@ -165,7 +169,8 @@ understand retrieval, or did they follow a tutorial."
 
 - *Why 512 and 64?* → signal density vs. keeping a clause intact; overlap stops
   a rule on a boundary being lost by both neighbours.
-- *Hybrid or pure vector?* → vector + semantic reranker. Two stages.
+- *Hybrid or pure vector?* → pure vector today. The semantic parameter in the
+  payload is a no-op — no config on the index, silently ignored. Say so.
 - *How do you keep it fresh?* → scheduled indexer, incremental change detection
   on blob `LastModified`.
 - *How do you know it works?* → you don't have numbers. Say so, then say what
@@ -317,17 +322,59 @@ retrieval returns a 40-page PDF and you've gained nothing. Projections fan the
 chunks out so the retrievable unit is the chunk, and
 `skipIndexingParentDocuments` stops the parent being indexed alongside them.
 
-### The query side
+### The query side — what it actually does
 
-`_search_policies` does a **vector query plus semantic reranking**:
+`_search_policies` (`mcp_server.py:106`) embeds the question and sends **one
+POST** to the index. The retrieval *mode* is decided entirely by which fields
+are in that JSON body — not by any code structure:
 
-- embed the user's question
-- `vectorQueries` against `content_vector`, top *k*
-- `queryType: "semantic"` — Azure's L2 reranker reorders the vector hits using
-  a cross-encoder
+| fields in the payload | mode you get |
+| --- | --- |
+| `search` only | BM25 keyword |
+| `vectorQueries` only | **pure vector (this is what we send)** |
+| both together | hybrid — Azure fuses them with Reciprocal Rank Fusion |
+| `queryType: "semantic"` + `semanticConfiguration` | adds the L2 cross-encoder rerank |
 
-That's a two-stage retrieval: **vector for recall, semantic reranker for
-precision**. Worth naming explicitly — "we rerank" is a strong signal.
+**Verified against the live index, not read off the source:**
+
+```
+A) vector only  (current code)   score=0.7406  rerankerScore=None
+B) keyword only (BM25)           score=10.5328
+C) hybrid (search + vector, RRF) score=0.0331
+D) hybrid + semantic             HTTP 400 — "must have valid semantic
+                                 configurations defined"
+```
+
+The score scales are the tell: cosine is 0–1, BM25 is unbounded, RRF is tiny
+(it sums `1/(60+rank)`), and a reranker score would appear separately in
+`@search.rerankerScore` on a 0–4 scale.
+
+### ⚠️ The reranker is not running
+
+The payload sets `queryType: "semantic"` and `semanticConfiguration: "default"`,
+but **no semantic configuration exists on `policy-index`** — the index's
+`semantic` block is empty, and no setup script creates one.
+
+Azure does **not** error. The request returns 200 and `@search.rerankerScore` is
+`None` on every hit. The parameter is silently ignored, because without a
+`search` text there's no ranker path to engage. Add the keyword leg and the same
+call fails with a 400.
+
+So the accurate description of the current system is **pure vector retrieval,
+top-k, no rerank, not hybrid**.
+
+**Do not claim reranking or hybrid search.** It's a two-minute check for anyone
+who looks. What you *can* say, which is better:
+
+> "Right now it's pure vector — top-k over chunk embeddings. There's a
+> `queryType: semantic` in the payload that does nothing, because the index has
+> no semantic configuration and Azure ignores it silently rather than erroring.
+> I found that by checking for `rerankerScore` in the response instead of
+> trusting the request. Making it real is two changes: define the semantic
+> configuration on the index, and add the `search` text so there's a keyword leg
+> for RRF to fuse."
+
+That answer is worth more than the feature would have been.
 
 `_search_similar_claims` adds **`vectorFilterMode: "preFilter"`** — narrow to
 the caller's own claims *before* ranking, so *k* only has to cover the matches
@@ -380,9 +427,10 @@ That answer demonstrates more than the inflated one, and it survives follow-ups.
   keyword-only, no vector query. The live path is `_search_policies` in
   `mcp_server.py`. Don't let a reviewer find the old file and conclude the
   vectors are unused.
-- The query passes `semanticConfiguration: "default"` but no setup script
-  creates one — it was added in the portal. That's exactly the kind of thing
-  IaC would have caught.
+- The query passes `semanticConfiguration: "default"` and **no such
+  configuration exists** — not in a setup script and not on the index. Azure
+  ignores it rather than erroring, so the call has looked healthy the whole
+  time. Exactly the kind of drift IaC would have caught.
 
 ## A3. NL2SQL as a subgraph-as-a-tool
 
@@ -839,8 +887,13 @@ Spoken answers, not written ones. Two or three sentences, then stop.
 > for finding the relevant set.
 
 **Vector search alone, or hybrid?**
-> Vector retrieval with Azure's semantic reranker on top — `queryType: semantic`.
-> So two stages: vectors for recall, a cross-encoder reranker for precision.
+> Pure vector today, and there's a real bug behind that. The payload asks for
+> `queryType: semantic`, but the index has no semantic configuration — so Azure
+> ignores the parameter, returns 200, and no reranking happens. It looks
+> configured and isn't. I found it by checking the response for a reranker score
+> instead of trusting the request. Two changes make it genuine: define the
+> semantic configuration on the index, and add the `search` text so there's a
+> keyword leg for reciprocal rank fusion.
 
 **How do you evaluate retrieval quality?**
 > I don't, formally, and that's the biggest gap in the project. I have no golden
