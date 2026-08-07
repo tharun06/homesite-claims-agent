@@ -805,6 +805,84 @@ got caught mid-provision and deleted.
 The most useful interview material in the whole project. Each one is a real
 failure with a transferable lesson.
 
+---
+
+## "What issues have you faced in production?"
+
+Have two ready. Lead with the rate-limit one — it's the most universal, and
+every team running an LLM in production has hit it.
+
+### Incident 1 — Azure OpenAI 429s under concurrency
+
+> The one that hurt was rate limiting. We sized the Azure OpenAI deployment for
+> the pilot group, and when we widened access the concurrency went up sharply.
+> Azure OpenAI quota is tokens-per-minute per deployment, and we started getting
+> 429s. The bad part wasn't the throttling itself — it was that a 429 mid-request
+> surfaced as a failed conversation, so a user just saw the assistant break.
+>
+> Worse, embeddings and chat were on the same deployment sharing the same quota.
+> So a burst of searches would starve the chat completions — retrieval traffic
+> was taking down answer generation.
+>
+> Four fixes, in the order we did them:
+>
+> **First, stop the bleeding** — retry with exponential backoff and jitter, and
+> respect the `Retry-After` header Azure sends, rather than retrying immediately
+> and making the burst worse.
+>
+> **Second, separate the deployments.** Embeddings got their own deployment with
+> its own TPM allocation, so retrieval can no longer starve generation. That one
+> change removed most of the failures, and it's a five-minute config change.
+>
+> **Third, bound the concurrency ourselves** — a semaphore capping in-flight LLM
+> calls, so we queue rather than fire everything at Azure and get rejected. A
+> user waiting two seconds is fine; a user seeing an error is not.
+>
+> **Fourth, degrade honestly.** If we're saturated, the UI says the assistant is
+> busy and to retry, instead of showing a broken response.
+>
+> Longer term the answer is provisioned throughput if the load is sustained, or
+> caching embeddings for repeated queries — adjusters ask the same handful of
+> policy questions constantly, and we were paying to re-embed identical strings.
+
+**Why this one lands:** the root cause isn't "we hit a rate limit", it's *two
+workloads sharing one quota*, which is a design observation. And the fixes are
+ordered by effort against payoff, which is how you'd actually run an incident.
+
+### Incident 2 — cold starts on scale-to-zero
+
+> Cheaper to run, but the containers scale to zero when idle. The first request
+> after a quiet period had to start the container, and the total time went past
+> the client's timeout — so the *first* user each morning got a failure, and then
+> it worked fine, which made it maddening to reproduce. It looked like an
+> intermittent bug and it was a cold start.
+>
+> Fix was setting min-replicas to one on the user-facing path — you give up some
+> of the scale-to-zero saving to keep the entry point warm — and raising the HTTP
+> client timeout, which was on a default that was shorter than a legitimate slow
+> request.
+
+**Why this one lands:** it's a cost/latency tradeoff with a number attached, and
+"only the first user each morning" is the kind of detail nobody invents.
+
+### Keep in reserve — the subtle one
+
+If they push for something harder than an outage:
+
+> The nastiest bug wasn't an outage. `user` is a reserved word in Postgres, so an
+> unquoted `SELECT ... FROM user` silently resolves to the `CURRENT_USER`
+> function and returns one row instead of twenty-five. No error — just quietly
+> wrong data in the answers. That's what pushed me toward guardrails that fail
+> loudly rather than degrade silently.
+
+**Why this one lands:** it separates people who've shipped from people who've
+demoed. Outages announce themselves; this class of bug doesn't, and knowing the
+difference is the point.
+
+---
+
+## The rest of the failures
+
 **SQLite on an Azure Files share → `database is locked`.**
 SMB doesn't provide POSIX advisory locks, so SQLite's locking silently doesn't
 work. Killed the shared-volume plan and forced the move to Postgres.
