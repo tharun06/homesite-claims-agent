@@ -415,3 +415,143 @@ Have two ready. Lead with the rate-limit one; it's the most universal.
 > Azure AI Content Safety has prompt shields for document attacks and that's
 > where I'd go next. And I'd want the audit trail to record which client made a
 > change, which it currently doesn't.
+
+
+---
+
+# What is NOT implemented
+
+Verified against the repo, not from memory. Split three ways, because the
+distinction is the whole point: **a deliberate omission is a design decision, a
+known gap is self-awareness, and confusing the two is what makes someone sound
+junior.**
+
+Never say "we didn't have time." Say what you traded and why.
+
+---
+
+## Tier 1 — Deliberate. Defend these.
+
+| not built | why that was right |
+| --- | --- |
+| **Multi-agent / supervisor pattern** | Two agents, one wrapped as a tool. Multi-agent buys separation and costs latency, tokens, and much harder debugging. No problem here needed it. |
+| **VNet / private endpoints** | Actively wrong — Claude and ChatGPT connectors require public reachability. Locking it down would break the feature. |
+| **API Management** | ~$50–210/month floor for a gateway this doesn't need yet. |
+| **Azure Functions as host** | 230-second execution cap versus a streaming transport. Rejected on the constraint, not on taste. |
+| **AKS** | A cluster to operate for three containers. |
+| **Azure Container Registry** | ~$5/month standing charge whether you push or not. ghcr.io is free for public images. |
+| **Microsoft Graph API** | Users, groups, mail, Teams. Irrelevant to claims. |
+| **Bot Service / Teams channel** | A different stack from LLM connectors. Only worth it for a Teams-facing bot. |
+| **Fine-tuning** | RAG was the right tool — the knowledge changes, and you don't retrain for a policy update. |
+| **N+1 fix in `claim_summary`** | 174 queries, ~7.5s. Measured it, attempted a preload, it didn't work, reverted rather than ship something half-done. Knowing the cost and declining to pay it is a decision; not knowing is not. |
+
+---
+
+## Tier 2 — Known gaps. Admit these, with a plan.
+
+### Evaluation — the biggest one
+
+- No golden question set, no **recall@k**, no **faithfulness** measurement
+- No regression run in CI, so a prompt change can silently degrade quality
+- No answer-quality scoring of any kind
+- Tuned by reading outputs by hand
+
+> "A prompt tweak could make things worse and I'd find out from a user."
+
+### Security and the public tool surface
+
+- **Tool surface not split by trust** — all nine tools are public, including the three writes
+- **Write tools bypass the approval gate over MCP** — the interrupt lives in the copilot's graph, so a write from Claude never reaches it
+- **No PII redaction** — `claim_summary` returns customer name, phone, email, VIN, policy number, all of which would cross to a third-party model provider
+- **No tool annotations** (`readOnlyHint` / `destructiveHint`) — which is why ChatGPT labels all nine tools DESTRUCTIVE
+- **No rate limiting** on the MCP server or the embedding-backed tools
+- **Audit trail doesn't record the calling client** — dashboard, Claude, ChatGPT and internal services can all act as the same human, so "which client made this change" is unanswerable
+- **No prompt-injection detection** — the effect is blocked, the attempt isn't flagged. Azure AI Content Safety prompt shields is the next step
+- **Browser OAuth handshake incomplete** — Entra requires the resource indicator be an App ID URI on a verified domain, and the app is on a Microsoft-owned hostname
+- **API keys in environment variables** — no managed identity
+
+### Retrieval
+
+- **No OCR / Document Intelligence** — the corpus is text. Real claims mean FNOL forms, police reports, repair estimates, photos
+- **Fixed-window chunking** — 512/64. Policy documents have real structure (numbered clauses) that a token window cuts through arbitrarily
+- **No query rewriting** — no HyDE, no multi-query expansion, no conversational query rephrasing
+- **Citations are instructed, not verified** — the model is told to name the source file; nothing checks that it did, or that the claim is supported
+- **No deletion handling on the index** — without a soft-delete policy, a removed document stays searchable
+- **No embedding cache** — adjusters ask the same handful of policy questions and we re-embed identical strings
+- **No reindex strategy** for an embedding model change
+
+### Agent
+
+- **No long-term memory** — state is per-thread; nothing persists across conversations, no user profile
+- **No context-window management** — a long thread will eventually overflow; there's no summarisation or trimming
+- **No token budgeting or cost attribution per conversation**
+- **No model fallback** — if the deployment is unavailable, there's no secondary
+- **`build_graph()` spawns a new MCP subprocess per request** — harmless locally, a process leak in a container
+
+### Operations
+
+- **No IaC** — confirmed: zero Bicep, Terraform or `azure.yaml`. Everything in Azure was clicked or typed, so it isn't reproducible and can't be diffed
+- **No automatic rollout** — the workflows build images; deployment is a manual `az containerapp update`
+- **No OIDC federation** from Actions to Azure — a stored credential instead
+- **No LLM observability in production** — LangSmith is in `requirements.txt` and there's a Studio entry point, but no tracing env vars on the deployed app. No per-conversation token spend, no per-node latency, no tracing a bad answer back to its retrieval
+- **No alerting** — nothing fires on 429 rate or on retrieval returning zero results, and both fail quietly
+- **No real test suite** — `test_connections.py` is a connectivity script; there are no unit or integration tests for the agent
+- **No staging environment** — one environment
+- **No load testing**, no canary or blue-green, no documented rollback
+- **No tested backup/restore** for Postgres
+- **No cost alerting**
+
+### Data
+
+- **Synthetic corpus** — 10 documents, no real policy text, no real policyholders
+- **No data agreement or de-identification pipeline** for a real extract
+
+---
+
+## Tier 3 — Before it could carry real claims
+
+Worth naming to show you know the difference between a working system and a
+production one:
+
+1. A signed data agreement and de-identified extract
+2. PII redaction before anything reaches a third-party model
+3. The eval harness, running in CI
+4. Authority enforcement fully server-side — the backend should reject a status
+   transition that exceeds the caller's role and amount authority, rather than
+   trusting the agent
+5. Audit trail with the calling client recorded
+6. IaC, so the environment is reproducible
+7. Observability with alerting
+8. A rollback plan someone has actually rehearsed
+
+---
+
+## The three to volunteer unprompted
+
+Say these before you're asked. Naming your own hole is the single strongest
+move available, and it pre-empts the question they were building toward.
+
+1. **"The write tools shouldn't be on the public surface at all."** The approval
+   gate lives in the copilot's graph, and an external client bypasses it.
+   Authentication answers *who*, not *what they may do*.
+2. **"I have no evaluation harness."** Then the plan: recall@k separately from
+   answer quality, because they fail for different reasons and you can't fix
+   what you can't separate.
+3. **"Nothing is infrastructure-as-code."** It was all clicked, so it isn't
+   reproducible — and I found a search configuration referenced in code that no
+   setup script created, which is exactly the drift IaC catches.
+
+## How to say it
+
+The shape that works, every time — **name it, own the consequence, state the
+fix, size it**:
+
+> "No eval harness. That means a prompt change could degrade retrieval and I'd
+> find out from a user rather than from CI. What I'd build first is a hundred
+> labelled questions with known-correct source documents, measuring recall@k
+> separately from answer quality — maybe two days of work, and it's the thing
+> I'd do before adding another feature."
+
+What not to do: "we didn't have time", "that was out of scope", or listing a gap
+with no opinion about it. A gap you can't cost is a gap you haven't thought
+about.
