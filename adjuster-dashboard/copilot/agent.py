@@ -43,6 +43,117 @@ SYSTEM_PROMPT = (
     "to the user's figures."
 )
 
+# ── context budget ───────────────────────────────────────────────────────────
+# A turn is not one LLM call. The agent node runs, a tool runs, the agent node
+# runs again — and every one of those calls re-sends the whole message list.
+# So a tool result is not paid for once; it is paid for on every subsequent call
+# for the rest of the conversation.
+#
+# Measured on this codebase:
+#
+#   all 9 tool schemas        522 tokens   (small — not worth optimising)
+#   ONE search_policy_docs  ~2,560 tokens   (5 chunks x 512)
+#
+# The retrieval result costs 5x the entire tool surface, and it is the thing
+# that repeats. By turn five, four stale retrievals are being re-sent on every
+# call — ~10,000 tokens of chunks the model already read and summarised.
+#
+# Two rules below, in order of how much they save:
+#
+#   1. truncate OLD tool results (everything before the current turn)
+#   2. then hold the whole thing under a token budget
+#
+# IMPORTANT: this trims what we SEND, never what we STORE. The checkpointer keeps
+# the full history — that is the audit trail, and it is what lets us pull the
+# exact state of any conversation by thread_id when a user reports a bad answer.
+# Pruning state itself (e.g. RemoveMessage) would buy the same tokens and cost us
+# that, and it risks breaking resume-from-interrupt, which depends on the message
+# structure being intact.
+TOOL_RESULT_KEEP_CHARS = int(os.getenv("COPILOT_TOOL_RESULT_KEEP", "240"))
+CONTEXT_BUDGET_TOKENS = int(os.getenv("COPILOT_CONTEXT_BUDGET", "12000"))
+
+try:
+    import tiktoken
+    _ENC = tiktoken.get_encoding("cl100k_base")
+    def _tok(text: str) -> int:
+        return len(_ENC.encode(text))
+except Exception:                      # tiktoken absent — approximate
+    def _tok(text: str) -> int:
+        return len(text) // 4
+
+
+def _count_tokens(messages) -> int:
+    """Rough token count for a message list. Only needs to be good enough to
+    decide what to drop, so it approximates the per-message overhead rather than
+    reproducing the exact chat-format accounting."""
+    total = 0
+    for m in messages:
+        content = getattr(m, "content", "") or ""
+        total += _tok(content if isinstance(content, str) else str(content)) + 4
+        for call in (getattr(m, "tool_calls", None) or []):
+            total += _tok(str(call.get("args", ""))) + 10
+    return total
+
+
+def _truncate_old_tool_results(messages: list) -> list:
+    """Shorten tool output from PREVIOUS turns; leave the current turn intact.
+
+    Truncating the content rather than dropping the message is deliberate. The
+    chat API requires every ToolMessage to match a preceding tool_call id — drop
+    one side of that pair and the next request fails with a 400. Editing content
+    in place keeps every pair valid, and still removes almost all the bulk.
+
+    Copies rather than mutates: these objects are the ones held in graph state,
+    and editing them in place would corrupt the stored history we just said we
+    were preserving."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    last_human = max(
+        (i for i, m in enumerate(messages) if isinstance(m, HumanMessage)),
+        default=-1,
+    )
+    out = []
+    for i, m in enumerate(messages):
+        is_old_tool_result = (
+            i < last_human
+            and isinstance(m, ToolMessage)
+            and isinstance(m.content, str)
+            and len(m.content) > TOOL_RESULT_KEEP_CHARS
+        )
+        if is_old_tool_result:
+            dropped = len(m.content) - TOOL_RESULT_KEEP_CHARS
+            out.append(m.model_copy(update={
+                "content": m.content[:TOOL_RESULT_KEEP_CHARS]
+                + f"\n…[{dropped} chars of earlier tool output trimmed from context."
+                  " Call the tool again if you need the full detail.]"
+            }))
+        else:
+            out.append(m)
+    return out
+
+
+def _prepare_context(messages: list) -> list:
+    """What the LLM actually sees. Never what we store."""
+    trimmed = _truncate_old_tool_results(messages)
+    try:
+        from langchain_core.messages import trim_messages
+        # start_on="human" is the safety property: it guarantees the window can
+        # never begin on an orphaned ToolMessage whose matching tool_call was cut.
+        kept = trim_messages(
+            trimmed,
+            max_tokens=CONTEXT_BUDGET_TOKENS,
+            strategy="last",
+            token_counter=_count_tokens,
+            start_on="human",
+            allow_partial=False,
+        )
+        return kept or trimmed[-2:]      # never send an empty context
+    except Exception:
+        # Budgeting is an optimisation. If it ever fails, send the full list and
+        # let the model sort it out — degrading to "expensive" beats "broken".
+        return trimmed
+
+
 def router_after_agent(state: State):
     last_message = state["messages"][-1]
     if not last_message.tool_calls:
@@ -172,7 +283,9 @@ async def build_graph(adjuster_token: str | None = None):
                 ).bind_tools(tools)
 
                 def agent_node(state: State):
-                    messages = [("system", SYSTEM_PROMPT), *state["messages"]]
+                    # _prepare_context bounds what we SEND. state["messages"] —
+                    # and therefore the checkpoint — keeps everything.
+                    messages = [("system", SYSTEM_PROMPT), *_prepare_context(state["messages"])]
                     return {"messages": [llm.invoke(messages)]}
 
                 tool_node = ToolNode(read_tools)
