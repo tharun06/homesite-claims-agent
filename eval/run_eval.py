@@ -122,12 +122,31 @@ def norm(s: str) -> str:
 
 
 def run(cases: list[dict], with_generation: bool) -> dict:
-    ranks, gen_rows = [], []
+    ranks, gen_rows, precisions, sufficient = [], [], [], []
     for i, c in enumerate(cases, 1):
         hits = search(c["question"])
         sources = [h["metadata_storage_name"] for h in hits]
         rank = next((j + 1 for j, s in enumerate(sources) if s == c["expected_source"]), None)
         ranks.append(rank)
+
+        # ── context precision: how much of what came back was noise? ─────────
+        # Every question here is answerable from ONE document, so a chunk from a
+        # different file is noise by definition. Recall says the right document
+        # was found; precision says how much junk arrived with it. Low precision
+        # is the leading suspect for the false-coverage rate — if four of five
+        # chunks describe coverage and one holds the exclusion, the model is
+        # effectively voting.
+        if sources:
+            precisions.append(sum(1 for s in sources if s == c["expected_source"]) / len(sources))
+
+        # ── context sufficiency: did the retrieved text contain what's needed?
+        # A free recall proxy, using labels we already have — if `must_mention`
+        # lists the figure the answer turns on, and it is absent from every
+        # retrieved chunk, no prompt can rescue that answer.
+        terms = c.get("must_mention", [])
+        if terms:
+            blob = norm(" ".join(h.get("content", "") for h in hits))
+            sufficient.append(all(norm(t) in blob for t in terms))
 
         row = {"id": c["id"], "rank": rank}
         if with_generation:
@@ -156,6 +175,8 @@ def run(cases: list[dict], with_generation: bool) -> dict:
         "recall_at_3": round(sum(1 for r in ranks if r and r <= 3) / n, 3),
         "recall_at_5": round(sum(1 for r in ranks if r and r <= 5) / n, 3),
         "mrr": round(sum(1 / r for r in found) / n, 3) if n else 0.0,
+        "context_precision": round(sum(precisions) / len(precisions), 3) if precisions else None,
+        "context_sufficiency": round(sum(sufficient) / len(sufficient), 3) if sufficient else None,
     }
 
     if with_generation:
@@ -185,6 +206,10 @@ def show(m: dict) -> None:
     print("\n── retrieval " + "─" * 46)
     for k in ("recall_at_1", "recall_at_3", "recall_at_5", "mrr"):
         print(f"  {k:<22} {m[k]}")
+    print(f"  {'context_precision':<22} {m.get('context_precision')}"
+          "   (share of retrieved chunks from the right document)")
+    print(f"  {'context_sufficiency':<22} {m.get('context_sufficiency')}"
+          "   (retrieved text actually contained the key term)")
     if "false_coverage_rate" not in m:
         return
     print("\n── generation (gold context) " + "─" * 30)
