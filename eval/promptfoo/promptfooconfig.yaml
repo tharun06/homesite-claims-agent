@@ -1,0 +1,109 @@
+# promptfoo — generation-side evaluation for the Claims Copilot.
+#
+#   npx promptfoo@latest eval    # run
+#   npx promptfoo@latest view    # web UI: every case, pass/fail, diffs
+#
+# Retrieval is NOT measured here. eval/run_eval.py --retrieval owns recall@k,
+# because promptfoo has no notion of a search index. prepare.py resolves the
+# gold context first, so every case here is asked with the correct document in
+# hand — a wrong answer can then only be the model's fault.
+#
+# The point of using promptfoo rather than more Python is `providers`: add a
+# second entry and the same 30 cases run against both, side by side, in one
+# table. That is how you answer "would a bigger model fix this?" with evidence
+# instead of an opinion.
+
+description: Claims Copilot — coverage reasoning and faithfulness
+
+prompts:
+  # NOTE: promptfoo splits a .txt prompt file on lines containing only `---`,
+  # treating each block as a SEPARATE prompt. Using `---` to delimit the policy
+  # text silently produced three prompts, two of which had no instructions and
+  # no context. Delimit with anything else.
+  - file://prompt.txt
+
+providers:
+  - id: azureopenai:chat:gpt-4.1-mini
+    label: gpt-4.1-mini
+    config:
+      apiHost: homesite-claims-resource.openai.azure.com
+      temperature: 0
+      # Guarantees no ```json fences around the reply. Azure only accepts this
+      # when the prompt literally contains the word "json" in some form, which
+      # is why prompt.txt says "Respond with json only" in lower case.
+      response_format: { type: json_object }
+
+  # Uncomment to compare models on the SAME cases. This is the whole reason
+  # promptfoo earns its place next to the Python harness.
+  # - id: azureopenai:chat:gpt-4o
+  #   label: gpt-4o
+  #   config:
+  #     apiHost: homesite-claims-resource.openai.azure.com
+  #     temperature: 0
+
+tests: file://tests.json
+
+defaultTest:
+  # The grader for the LLM-judged assertions below. Deliberately named so it is
+  # obvious a model is doing the grading — those results need their own
+  # validation before you trust them.
+  options:
+    provider:
+      id: azureopenai:chat:gpt-4.1-mini
+      config:
+        apiHost: homesite-claims-resource.openai.azure.com
+        temperature: 0
+
+  assert:
+    # ── deterministic: no model involved, trust these first ─────────────────
+    - type: is-json
+      value:
+        type: object
+        required: [verdict, quote, answer]
+        properties:
+          verdict:
+            type: string
+            enum: [covered, excluded, conditional, informational, insufficient_evidence]
+          quote: { type: string }
+          answer: { type: string }
+
+    # Did it reach the RIGHT CONCLUSION? This is the assertion that catches the
+    # actual bug — correct clause retrieved, wrong verdict. Faithfulness will
+    # NOT catch that, because a wrong conclusion phrased in the document's own
+    # words is perfectly "supported" by the context.
+    - type: javascript
+      value: |
+        const parse = o => typeof o !== 'string' ? o : JSON.parse(o.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim());
+        const got = parse(output).verdict;
+        const want = context.vars.expected_verdict;
+        return { pass: got === want,
+                 score: got === want ? 1 : 0,
+                 reason: `expected ${want}, got ${got}` };
+
+    # Citation validity: did the quoted sentence actually appear in the source?
+    # Catches a fabricated quote without needing a judge.
+    - type: javascript
+      value: |
+        const norm = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const parse = o => typeof o !== 'string' ? o : JSON.parse(o.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim());
+        const q = norm(parse(output).quote);
+        const ok = q.length > 20 && norm(context.vars.context).includes(q.slice(0, 80));
+        return { pass: ok, score: ok ? 1 : 0,
+                 reason: ok ? 'quote found in context' : 'quote not present in source text' };
+
+    # ── LLM-judged: this is the hallucination check ─────────────────────────
+    # Is every claim in the answer supported by the supplied context? Catches
+    # FABRICATION — inventing a limit or a clause that is not there.
+    # It does NOT catch misreading something that IS there.
+    - type: context-faithfulness
+      # Judge the prose, not the JSON envelope — otherwise the grader is asked
+      # whether {"verdict": ...} is supported by the policy, which is nonsense.
+      transform: |
+        const parse = o => typeof o !== 'string' ? o : JSON.parse(o.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()); return parse(output).answer;
+      threshold: 0.8
+
+    # Does the answer actually address the question asked?
+    - type: answer-relevance
+      transform: |
+        const parse = o => typeof o !== 'string' ? o : JSON.parse(o.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()); return parse(output).answer;
+      threshold: 0.7

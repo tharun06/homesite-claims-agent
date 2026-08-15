@@ -45,3 +45,8 @@ Thumbs.db
 
 .mcp_api_appid
 .mcp_client_appid
+
+# promptfoo
+eval/promptfoo/result.json
+eval/promptfoo/tests.json
+.promptfoo/
