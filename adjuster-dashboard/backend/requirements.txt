@@ -14,4 +14,4 @@ faker==40.23.0
 # PostgreSQL driver (deployed). SQLite needs no driver, so this is only
 # exercised when DATABASE_URL points at Postgres.
 psycopg[binary]==3.3.4
-azure-monitor-opentelemetry==1.9.0
+azure-monitor-opentelemetry==1.8.9
