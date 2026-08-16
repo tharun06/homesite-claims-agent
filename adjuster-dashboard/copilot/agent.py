@@ -1,4 +1,5 @@
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Annotated, TypedDict
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ from mcp.client.stdio import stdio_client
 from langchain_mcp_adapters.tools import load_mcp_tools
 
 import httpx
+import telemetry
 from langchain_core.tools import tool
 from sql_graph import build_sql_graph
 from sql_runtime import database_available
@@ -282,11 +284,19 @@ async def build_graph(adjuster_token: str | None = None):
                     api_version="2024-08-01-preview",
                 ).bind_tools(tools)
 
+                model_name = os.getenv("AZURE_OPENAI_DEPLOYMENT", "unknown")
+
                 def agent_node(state: State):
                     # _prepare_context bounds what we SEND. state["messages"] —
                     # and therefore the checkpoint — keeps everything.
                     messages = [("system", SYSTEM_PROMPT), *_prepare_context(state["messages"])]
-                    return {"messages": [llm.invoke(messages)]}
+                    # The GenAI span is what makes this call visible as a model
+                    # call rather than an outbound POST. Token counts come off
+                    # the reply, so they cost nothing extra to record.
+                    with telemetry.chat_span(model_name) as span:
+                        reply = llm.invoke(messages)
+                        telemetry.record_usage(span, reply)
+                    return {"messages": [reply]}
 
                 tool_node = ToolNode(read_tools)
                 action_node = ToolNode(write_tools)
@@ -319,6 +329,10 @@ TOOL_STATUS = {
 
 
 async def stream_chat(graph, message: str, config: dict):
+    # run_id -> start time, so a tool span can be emitted with real timestamps
+    # once the tool finishes. LangGraph runs tools inside its own node, which we
+    # do not wrap; the event stream is the only place both ends are visible.
+    _tool_started: dict = {}
     async for event in graph.astream_events(
         {"messages": [("user", message)]},
         config=config,
@@ -336,9 +350,13 @@ async def stream_chat(graph, message: str, config: dict):
             if text:
                 yield {"delta": text}
         elif kind == "on_tool_start":
+            _tool_started[event.get("run_id")] = time.time_ns()
             phrase = TOOL_STATUS.get(event["name"], f"running {event['name']}")
             yield {"status": f"🔍 {phrase}…"}
         elif kind == "on_tool_end":
+            started = _tool_started.pop(event.get("run_id"), None)
+            if started:
+                telemetry.tool_span(event["name"], started, time.time_ns())
             yield {"status": "✍️ writing your answer…"}
 
     snapshot = await graph.aget_state(config)

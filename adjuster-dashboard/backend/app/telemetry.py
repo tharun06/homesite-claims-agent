@@ -71,3 +71,105 @@ def setup(service_name: str) -> bool:
     except Exception as exc:                      # never break the app for this
         logging.getLogger(__name__).warning("telemetry setup failed: %s", exc)
         return False
+
+
+# ── GenAI spans ──────────────────────────────────────────────────────────────
+# Azure Monitor's "Agents" view reads OpenTelemetry GenAI semantic conventions:
+# gen_ai.system, gen_ai.request.model, token usage, tool calls. Generic HTTP
+# instrumentation cannot produce those - it sees a POST to an Azure OpenAI host,
+# not a completion that used 3,200 prompt tokens and called search_policy_docs.
+#
+# The official instrumentation (opentelemetry-instrumentation-openai-v2) pins
+# opentelemetry-instrumentation ~=0.60b0 while azure-monitor-opentelemetry 1.8.9
+# pins >=0.64b0,<0.65.0. Those ranges do not overlap, so it cannot be installed
+# alongside the Azure distro today. We emit the spans ourselves instead: the
+# attributes are a published spec, we already have every value, and this cannot
+# be broken by either package moving.
+#
+# Message CONTENT is deliberately not captured. The spec has a flag for it, but
+# prompts here contain policy text and claim details, and putting that in Log
+# Analytics is a privacy decision rather than a config one.
+from contextlib import contextmanager
+
+_GEN_AI_SYSTEM = "az.ai.openai"
+
+
+@contextmanager
+def chat_span(model: str):
+    """Wrap one model call. Span name follows the spec: "<operation> <model>"."""
+    if not _configured:
+        yield None
+        return
+    try:
+        from opentelemetry import trace
+        from opentelemetry.trace import SpanKind
+    except ImportError:
+        yield None
+        return
+
+    tracer = trace.get_tracer("homesite.genai")
+    with tracer.start_as_current_span(f"chat {model}", kind=SpanKind.CLIENT) as span:
+        span.set_attribute("gen_ai.system", _GEN_AI_SYSTEM)
+        span.set_attribute("gen_ai.operation.name", "chat")
+        span.set_attribute("gen_ai.request.model", model)
+        yield span
+
+
+def record_usage(span, reply) -> None:
+    """Copy token counts and finish reason off a LangChain reply onto the span.
+
+    usage_metadata is the normalised shape LangChain exposes; response_metadata
+    is the raw provider payload and is used only as a fallback.
+    """
+    if span is None or reply is None:
+        return
+    try:
+        usage = getattr(reply, "usage_metadata", None) or {}
+        if not usage:
+            usage = (getattr(reply, "response_metadata", {}) or {}).get("token_usage", {}) or {}
+        for attr, keys in (
+            ("gen_ai.usage.input_tokens", ("input_tokens", "prompt_tokens")),
+            ("gen_ai.usage.output_tokens", ("output_tokens", "completion_tokens")),
+        ):
+            for k in keys:
+                if usage.get(k) is not None:
+                    span.set_attribute(attr, int(usage[k]))
+                    break
+        meta = getattr(reply, "response_metadata", {}) or {}
+        if meta.get("finish_reason"):
+            span.set_attribute("gen_ai.response.finish_reasons", [str(meta["finish_reason"])])
+        if meta.get("model_name"):
+            span.set_attribute("gen_ai.response.model", str(meta["model_name"]))
+        # Which tools the model asked for - this is what turns a completion into
+        # an agent step in the Agents view.
+        calls = getattr(reply, "tool_calls", None) or []
+        if calls:
+            span.set_attribute("gen_ai.response.tool_calls", [c.get("name", "?") for c in calls])
+    except Exception:
+        pass          # telemetry must never break the call it is describing
+
+
+def tool_span(name: str, start_ns: int, end_ns: int, error: str = "") -> None:
+    """Record a completed tool execution.
+
+    Emitted after the fact with explicit timestamps because the tool runs inside
+    LangGraph's node, which we do not wrap - the event stream tells us when it
+    started and finished.
+    """
+    if not _configured:
+        return
+    try:
+        from opentelemetry import trace
+        from opentelemetry.trace import SpanKind, Status, StatusCode
+
+        tracer = trace.get_tracer("homesite.genai")
+        span = tracer.start_span(f"execute_tool {name}", kind=SpanKind.INTERNAL,
+                                 start_time=start_ns)
+        span.set_attribute("gen_ai.system", _GEN_AI_SYSTEM)
+        span.set_attribute("gen_ai.operation.name", "execute_tool")
+        span.set_attribute("gen_ai.tool.name", name)
+        if error:
+            span.set_status(Status(StatusCode.ERROR, error[:200]))
+        span.end(end_time=end_ns)
+    except Exception:
+        pass
