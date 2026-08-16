@@ -1,0 +1,8 @@
+{"id": "sql-001", "question": "How many claims do I have?", "user_id": 1, "role": "adjuster", "reference_sql": "SELECT COUNT(*) FROM my_claims"}
+{"id": "sql-002", "question": "How many of my claims are fraud flagged?", "user_id": 1, "role": "adjuster", "reference_sql": "SELECT COUNT(*) FROM my_claims WHERE fraud_flagged = 1"}
+{"id": "sql-003", "question": "How many claims do I have in each status?", "user_id": 1, "role": "adjuster", "reference_sql": "SELECT status, COUNT(*) FROM my_claims GROUP BY status", "unordered": true}
+{"id": "sql-004", "question": "What is the average estimated amount across my claims?", "user_id": 1, "role": "adjuster", "reference_sql": "SELECT ROUND(AVG(estimated_amount), 2) FROM my_claims", "tolerance": 0.01}
+{"id": "sql-005", "question": "Which region has the most claims?", "user_id": 24, "role": "admin", "reference_sql": "SELECT team.region, COUNT(*) AS n FROM my_claims JOIN user ON my_claims.adjuster_id = user.id JOIN team ON user.team_id = team.id GROUP BY team.region ORDER BY n DESC LIMIT 1"}
+{"id": "sql-006", "question": "What is the total reserve amount on my open claims?", "user_id": 1, "role": "adjuster", "reference_sql": "SELECT ROUND(SUM(reserve_amount), 2) FROM my_claims WHERE status NOT IN ('Closed', 'Denied', 'Approved')", "tolerance": 0.01}
+{"id": "sql-007", "question": "How many claims are there by peril type?", "user_id": 24, "role": "admin", "reference_sql": "SELECT peril_type, COUNT(*) FROM my_claims GROUP BY peril_type", "unordered": true}
+{"id": "sql-008", "question": "What is my single highest estimated claim amount?", "user_id": 1, "role": "adjuster", "reference_sql": "SELECT MAX(estimated_amount) FROM my_claims"}

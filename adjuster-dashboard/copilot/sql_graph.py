@@ -13,7 +13,7 @@ from langchain_openai import AzureChatOpenAI
 from langgraph.graph import StateGraph, START, END
 
 from schema_profiles import SEMANTIC_PROFILES
-from sql_runtime import scoped_connection, distinct_values, run_select
+from sql_runtime import scoped_connection, distinct_values, run_select, USERS_RELATION
 
 load_dotenv(find_dotenv())
 
@@ -40,7 +40,11 @@ class SqlState(TypedDict, total=False):
 # ── Node 1: ground_values ────────────────────────────────────────────────────
 GROUND_COLUMNS = [
     ("my_claims", "incident_city"),   # scoped: only cities the caller may see
-    ("app_users", "name"),                 # org directory (not per-claim sensitive)
+    # USERS_RELATION, not a hardcoded name: it is `app_users` on Postgres (where
+    # `user` is reserved) but plain `user` on SQLite. Hardcoding `app_users` made
+    # this node raise "no such table" on the first node of the graph in local
+    # dev, which took the whole subgraph down before it generated anything.
+    (USERS_RELATION, "name"),         # org directory (not per-claim sensitive)
     ("team", "name"),
 ]
 
@@ -112,7 +116,11 @@ def _render_schema(tables=None) -> str:
     out = []
     for tname in keys:
         prof = SEMANTIC_PROFILES[tname]
-        name = "my_claims" if tname == "claim" else tname
+        # The profile key is always `app_users`, but the real relation is only
+        # called that on Postgres. Render whatever this backend actually has, or
+        # the model is told to join a table that does not exist.
+        name = ("my_claims" if tname == "claim"
+                else USERS_RELATION if tname == "app_users" else tname)
         out.append(f"TABLE {name}: {prof['description']}")
         if tname == "claim":
             out.append("  NOTE: my_claims is a per-user SCOPED VIEW with all claim columns —")
@@ -120,18 +128,24 @@ def _render_schema(tables=None) -> str:
         for col, meta in prof["columns"].items():
             out.append(f"  - {col} ({meta['type']}): {meta['description']}")
         for rel in prof["relations"]:
-            out.append(f"  join: {rel.replace('claim.', 'my_claims.')}")
+            out.append("  join: " + rel.replace("claim.", "my_claims.")
+                                       .replace("app_users.", f"{USERS_RELATION}."))
         out.append("")
     return "\n".join(out)
 
+
+_RESERVED_WARNING = (
+    " NEVER write `user`: it is a reserved word that silently resolves to the "
+    "current-user function instead of the table, giving a wrong answer."
+    if USERS_RELATION != "user" else ""
+)
 
 _SYSTEM = (
     "You are a SQL expert. Write ONE read-only SELECT that answers the question.\n"
     "Rules:\n"
     "- Query the `my_claims` view for all claim data. NEVER reference a table named `claim`.\n"
-    "- You may JOIN to `app_users` (my_claims.adjuster_id = app_users.id) and `team` "
-    "(app_users.team_id = team.id). NEVER write `user`: it is a reserved word that silently "
-    "resolves to the current-user function instead of the table, giving a wrong answer.\n"
+    f"- You may JOIN to `{USERS_RELATION}` (my_claims.adjuster_id = {USERS_RELATION}.id) "
+    f"and `team` ({USERS_RELATION}.team_id = team.id).{_RESERVED_WARNING}\n"
     "- my_claims is ALREADY scoped to the current user. Do NOT add any adjuster_id/user filter "
     "for permission reasons; only filter adjuster_id if the question names a specific adjuster.\n"
     "- Use the EXACT stored strings from the schema enums and the sample values "

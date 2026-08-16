@@ -50,3 +50,9 @@ Thumbs.db
 eval/promptfoo/result.json
 eval/promptfoo/tests.json
 .promptfoo/
+
+# deepeval — generated per run
+eval/deepeval/results.json
+eval/deepeval/__pycache__/
+.deepeval/
+.deepeval-cache.json
