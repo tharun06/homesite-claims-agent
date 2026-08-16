@@ -53,10 +53,11 @@ def setup(service_name: str) -> bool:
             # Shows up as cloud_RoleName, which is how the three services are
             # told apart in the dependency map.
             resource_attributes={"service.name": service_name},
-            # Sampling keeps us inside the free grant if traffic ever grows.
-            # Errors are always kept regardless of this rate.
-            logger_name=None,
         )
+        # Do NOT pass logger_name=None here. It is not the same as omitting it -
+        # the metrics exporter calls it and dies with
+        # "TypeError: 'NoneType' object is not callable", which crashes the
+        # container on startup.
         _configured = True
         logging.getLogger(__name__).info("telemetry enabled for %s", service_name)
         return True
