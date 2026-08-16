@@ -39,6 +39,13 @@ def setup(service_name: str) -> bool:
     if not conn:
         return False
 
+    # OTEL_SERVICE_NAME is what actually populates AppRoleName. Passing
+    # resource_attributes={"service.name": ...} to configure_azure_monitor did
+    # NOT do it - everything arrived as "unknown_service", so the three services
+    # were indistinguishable in the dependency map. setdefault, so an explicit
+    # env var still wins.
+    os.environ.setdefault("OTEL_SERVICE_NAME", service_name)
+
     try:
         from azure.monitor.opentelemetry import configure_azure_monitor
     except ImportError:
