@@ -1,4 +1,13 @@
-from unittest import result
+import telemetry
+
+# FIRST, before fastapi / langchain / httpx are imported.
+#
+# OpenTelemetry instruments by patching modules, so anything already imported
+# and bound keeps the unpatched version. The backend does this correctly and
+# reports requests and dependencies; the copilot did it after importing FastAPI
+# and the whole LangChain stack, and reported nothing at all - no requests, no
+# Azure OpenAI calls, no search calls. Same code, different import position.
+telemetry.setup("homesite-copilot")
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,12 +17,6 @@ from agent import build_graph, stream_chat, _resolve_caller
 from langchain_core.messages import ToolMessage
 import json
 import traceback
-
-import telemetry
-
-# Before FastAPI is constructed: auto-instrumentation patches the frameworks it
-# hooks at import time, so wiring it after the app exists misses the routes.
-telemetry.setup("homesite-copilot")
 
 app = FastAPI(title="Adjuster Copilot")
 

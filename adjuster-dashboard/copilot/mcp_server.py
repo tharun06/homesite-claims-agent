@@ -1,3 +1,9 @@
+import telemetry
+
+# Before httpx and mcp are imported - see copilot/main.py for why position
+# matters more than placement looks like it should.
+telemetry.setup("homesite-mcp")
+
 import os
 import json
 from urllib import response
@@ -31,9 +37,6 @@ EMBED_DEPLOYMENT = os.getenv("AZURE_EMBEDDING_DEPLOYMENT", "")
 # made every claims lookup fail. Give backend calls room, and keep Azure
 # calls on a shorter leash.
 HTTP_TIMEOUT = 60.0
-
-import telemetry
-telemetry.setup("homesite-mcp")
 
 mcp = FastMCP("homesite-claims")
 
