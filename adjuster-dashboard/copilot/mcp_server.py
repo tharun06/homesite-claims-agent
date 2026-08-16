@@ -32,6 +32,9 @@ EMBED_DEPLOYMENT = os.getenv("AZURE_EMBEDDING_DEPLOYMENT", "")
 # calls on a shorter leash.
 HTTP_TIMEOUT = 60.0
 
+import telemetry
+telemetry.setup("homesite-mcp")
+
 mcp = FastMCP("homesite-claims")
 
 _token_cache: dict[str, str] = {}

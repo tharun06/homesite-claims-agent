@@ -7,6 +7,11 @@ Docs: http://localhost:8100/docs
 import asyncio
 import os
 
+from app import telemetry
+
+# Must run before FastAPI is built - see telemetry.setup().
+telemetry.setup("homesite-backend")
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
